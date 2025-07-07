@@ -3,3 +3,6 @@ test-data/*
 
 __pycache__
 __pycache__/*
+
+components-testing
+components-testing/*

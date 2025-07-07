@@ -1,5 +1,8 @@
 import streamlit as st
 import json
+from chat_dsat_mutator_controller import foo
+
+
 
 st.header("Synthetic Chat-Data Mutation Framework")
 
@@ -21,4 +24,8 @@ st.session_state["chat_sample"] = chat_sample
 
 # get mutation request
 st.subheader("Mutation request")
-mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'XXX'")
+#mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Inject a hallucination'")
+options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
+mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
+
+

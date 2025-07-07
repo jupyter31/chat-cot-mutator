@@ -1,6 +1,44 @@
 import streamlit as st
 import json
+import difflib
+
 from chat_dsat_mutator_controller import mutate_chat_sample
+
+def format_diff_text(diff):
+    """
+    Formats the differences in a visual way for the Streamlit app.
+    
+    Args:
+        diff (list): List of differences between the original and mutated chat sample.
+    
+    Returns:
+        formatted_diff (str): The difference text with added visual formatting features.
+    """
+
+    formatted_diff = ""
+    for word in diff:
+        if word.startswith("+ "):
+            formatted_diff += f":green-background[{word[2:]}] "
+        elif word.startswith("- "):
+            formatted_diff += f":red-background[~~{word[2:]}~~] "
+        else:
+            formatted_diff += f"{word} "
+
+    formatted_diff = formatted_diff.strip()
+
+    return formatted_diff
+
+def show_mutation_diffs(original, mutations):
+    """
+    Displays the differences between the original chat sample and the mutated samples.
+    
+    Args:
+        original (str): The original chat sample.
+        mutations (list): List of mutated chat samples.
+    """
+
+    differences = [difflib.ndiff(original.split(), mut.split()) for mut in mutations]
+    formatted_differences = [format_diff_text(diff) for diff in differences]
 
 
 
@@ -30,6 +68,6 @@ st.subheader("Mutation request")
 options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
 mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
 
-mutation = mutate_chat_sample(chat_sample, mutation_request)
+mutations = mutate_chat_sample(chat_sample, mutation_request)
 
 

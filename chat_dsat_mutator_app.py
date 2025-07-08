@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import difflib
 
-from chat_dsat_mutator_controller import mutate_chat_sample
+from chat_dsat_mutator_controller import mutate_chat_sample, validate_json
 
 def format_diff_text(diff):
     """
@@ -40,23 +40,7 @@ def show_mutation_diffs(original, mutations):
     differences = [difflib.ndiff(original.split(), mut.split()) for mut in mutations]
     formatted_differences = [format_diff_text(diff) for diff in differences]
 
-def validate_json(chat_sample):
-    """
-    Validates if the provided chat sample is a valid JSON.
-    
-    Args:
-        chat_sample (str): The chat sample in JSON format.
-        
-    Returns:
-        bool: True if valid, False otherwise.
-    """
-    if chat_sample is not None and chat_sample.strip() != "":
-        try:
-            chat_sample = json.loads(chat_sample)
-            return True
-        except json.JSONDecodeError as e:
-            st.error(f"Invalid JSON format: {e}")
-            return False
+
 
 
 st.header("Synthetic Chat-Data Mutation Framework")

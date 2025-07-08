@@ -72,7 +72,7 @@ if uploaded_file is not None:
     chat_sample = uploaded_file.read().decode("utf-8")
     valid_sample = validate_json(chat_sample)
 else:
-    chat_sample = st.text_area("Paste chat sample here")
+    chat_sample = st.text_area("Paste chat sample here", height=170)
     valid_sample = validate_json(chat_sample)
 
 st.session_state["chat_sample"] = chat_sample

@@ -7,7 +7,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
         mutation_request (str): The type of mutation to apply.
         
     Returns:
-        str: The mutated chat sample in ??? format.
+        str: The mutated chat samples in ??? format.
     """
 
     match mutation_request:
@@ -28,3 +28,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
 
 
     return ""
+
+
+
+

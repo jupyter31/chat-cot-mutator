@@ -6,3 +6,6 @@ __pycache__/*
 
 components-testing
 components-testing/*
+
+mutations
+mutations/*

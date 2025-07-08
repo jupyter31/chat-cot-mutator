@@ -40,34 +40,56 @@ def show_mutation_diffs(original, mutations):
     differences = [difflib.ndiff(original.split(), mut.split()) for mut in mutations]
     formatted_differences = [format_diff_text(diff) for diff in differences]
 
+def validate_json(chat_sample):
+    """
+    Validates if the provided chat sample is a valid JSON.
+    
+    Args:
+        chat_sample (str): The chat sample in JSON format.
+        
+    Returns:
+        bool: True if valid, False otherwise.
+    """
+    if chat_sample is not None and chat_sample.strip() != "":
+        try:
+            chat_sample = json.loads(chat_sample)
+            return True
+        except json.JSONDecodeError as e:
+            st.error(f"Invalid JSON format: {e}")
+            return False
 
 
 st.header("Synthetic Chat-Data Mutation Framework")
 
 # get chat sample input from file upload or text area
 st.subheader("Chat sample")
-# uploaded_file = st.file_uploader("Upload a JSON file", type=["json"])
-# chat_sample = ""
+uploaded_file = st.file_uploader("Upload a chat sample JSON file", type=["json"])
 
-# if uploaded_file is not None:
-#     try:
-#         chat_sample = json.load(uploaded_file)
-#         chat_sample = json.dumps(chat_sample, indent=2)
-#     except Exception as e:
-#         st.error(f"Error reading JSON file: {e}")
-# else:
-#     chat_sample = st.text_area("Paste chat sample here")
+chat_sample = ""
+valid_sample = False
 
-chat_sample = st.text_area("Paste chat sample here")
+if uploaded_file is not None:
+    chat_sample = uploaded_file.read().decode("utf-8")
+    valid_sample = validate_json(chat_sample)
+else:
+    chat_sample = st.text_area("Paste chat sample here")
+    valid_sample = validate_json(chat_sample)
 
 st.session_state["chat_sample"] = chat_sample
 
 # get mutation request
 st.subheader("Mutation request")
+
+# TODO: Allow plain English mutation requests
 #mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Inject a hallucination'")
+
 options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
 mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
 
-mutations = mutate_chat_sample(chat_sample, mutation_request)
+st.divider()
+
+disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request not in options)
+mutations = st.button("Submit", on_click=mutate_chat_sample, args=(chat_sample, mutation_request), disabled=disable_button)
+
 
 

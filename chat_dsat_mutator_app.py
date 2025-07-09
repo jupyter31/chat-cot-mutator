@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import difflib
 
-from chat_dsat_mutator_controller import mutate_chat_sample, validate_json
+from chat_dsat_mutator_controller import mutate_chat_sample
 
 def format_diff_text(diff):
     """
@@ -83,15 +83,17 @@ st.session_state["chat_sample"] = chat_sample
 st.subheader("Mutation request")
 
 # get plain English mutation requests
-mutation_request = ""
-mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Perform entity swapping on the chat sample'")
+# mutation_request = ""
+# mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Perform entity swapping on the chat sample'")
+# disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request.strip() == "")
 
-# options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
-# mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
+
+options = ["Evidence removal", "Entity swapping", "Evidence negation"]
+mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
+disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request not in options)
 
 st.divider()
 
-disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request.strip() == "")
 mutations = st.button("Submit", on_click=mutate_chat_sample, args=(chat_sample, mutation_request), disabled=disable_button)
 
 

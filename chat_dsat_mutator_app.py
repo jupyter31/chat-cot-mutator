@@ -28,6 +28,24 @@ def format_diff_text(diff):
 
     return formatted_diff
 
+def validate_json(chat_sample):
+    """
+    Validates if the provided chat sample is a valid JSON.
+    
+    Args:
+        chat_sample (str): The chat sample in JSON format.
+        
+    Returns:
+        bool: True if valid, False otherwise.
+    """
+    if chat_sample is not None and chat_sample.strip() != "":
+        try:
+            chat_sample = json.loads(chat_sample)
+            return True
+        except json.JSONDecodeError as e:
+            st.error(f"Invalid JSON format: {e}")
+            return False
+
 def show_mutation_diffs(original, mutations):
     """
     Displays the differences between the original chat sample and the mutated samples.
@@ -64,15 +82,16 @@ st.session_state["chat_sample"] = chat_sample
 # get mutation request
 st.subheader("Mutation request")
 
-# TODO: Allow plain English mutation requests
-#mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Inject a hallucination'")
+# get plain English mutation requests
+mutation_request = ""
+mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Perform entity swapping on the chat sample'")
 
-options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
-mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
+# options = ["Misattribution", "Hallucination", "Policy edge-cases", "Persona shift"]
+# mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
 
 st.divider()
 
-disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request not in options)
+disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request.strip() == "")
 mutations = st.button("Submit", on_click=mutate_chat_sample, args=(chat_sample, mutation_request), disabled=disable_button)
 
 

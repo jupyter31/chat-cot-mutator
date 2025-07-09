@@ -31,23 +31,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
 
     return ""
 
-def validate_json(chat_sample):
-    """
-    Validates if the provided chat sample is a valid JSON.
-    
-    Args:
-        chat_sample (str): The chat sample in JSON format.
-        
-    Returns:
-        bool: True if valid, False otherwise.
-    """
-    if chat_sample is not None and chat_sample.strip() != "":
-        try:
-            chat_sample = json.loads(chat_sample)
-            return True
-        except json.JSONDecodeError as e:
-            st.error(f"Invalid JSON format: {e}")
-            return False
+
 
 def remove_escape_characters(chat_sample):
     """
@@ -60,6 +44,24 @@ def remove_escape_characters(chat_sample):
         str: The chat sample without escape characters.
     """
     return chat_sample.replace("\\", "")
+
+def add_escape_characters(obj):
+    """
+    Adds escape characters to the chat sample.
+    
+    Args:
+        chat_sample (dict): The chat sample in JSON format.
+        
+    Returns:
+        dict: The chat sample with escape characters added.
+    """
+
+    if isinstance(obj, dict):
+        return {k: json.dumps(v) if isinstance(v, dict) else add_escape_characters(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [add_escape_characters(item) for item in obj]
+    else:
+        return obj
 
 
 

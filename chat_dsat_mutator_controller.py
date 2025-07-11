@@ -29,7 +29,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object with the most salient passages of the tool content with respect to the assistant golden answer removed. Do not return anything else. \n {json.dumps(messages)}"
+                        "content": "Return the whole JSON object with the most salient passages of the tool content with respect to the assistant golden answer removed."
                     }
                 ]
             }
@@ -51,7 +51,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object with the user prompt and the tool content rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors. Do not return anything else. \n {json.dumps(messages)}"
+                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors."
                     }
                 ]
             }
@@ -68,7 +68,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object with the salient passages of the tool content with respect to the assistant golden answer replaced with the negation of the assistant golden answer. Do not return anything else. \n {json.dumps(messages)}"
+                        "content": "Return the whole JSON object with the salient passages of the tool content with respect to the assistant golden answer replaced with the negation of the assistant golden answer."
                     }
                 ]
             }
@@ -86,7 +86,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object with the user prompt and the tool content rewritten to introduce date and number jitter. Do not return anything else. \n {json.dumps(messages)}"
+                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to introduce date and number jitter."
                     }
                 ]
             }
@@ -107,7 +107,9 @@ def mutate_chat_sample(chat_sample, mutation_request):
             pass
         case _:
             raise ValueError(f"Unknown mutation request: {mutation_request}")
-        
+    
+    # pad the request_data with generic useful information for the LLM
+    request_data = f"You are given the messages component of a JSON object used by an LLM. {request_data} Do not return anything else. \n Messages : {json.dumps(messages)}"
     response = call_llm_api(request_data)
     print(response)
 

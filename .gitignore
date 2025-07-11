@@ -10,4 +10,7 @@ components-testing/*
 mutations
 mutations/*
 
+old-tests
+old-tests/*
+
 llm_api_sample.py

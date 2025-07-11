@@ -48,13 +48,12 @@ if submit_click:
 
     for i, mut in enumerate(mutations):
         st.write(f"#### Variant {i + 1}")
-        st.json(mut)
 
         # TODO: add diff highlighting
         # diff = DeepDiff(json_chat_sample, mut, view="text")
 
         st.download_button(
-            label="Download JSON",
+            label="Download",
             data=json.dumps(mut, indent=2),
             file_name=f"mutated_variant_{i+1}.json",
             mime="application/json"

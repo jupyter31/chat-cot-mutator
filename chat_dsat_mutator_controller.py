@@ -191,7 +191,7 @@ def mutate_chat_samples(split_str_chat_samples, mutation_request):
         mutation_request (str): The type of mutation to apply.
         
     Returns:
-        list<json>: A list of JSON objects of the mutated chat samples.
+        list<dict>: A list of JSON objects of the mutated chat samples.
     """
     prompts = []
     for sample in split_str_chat_samples:
@@ -214,10 +214,10 @@ def call_llm_api(prompts):
     Calls the LLM API with the provided prompts.
     
     Args:
-        prompts (list<json>): A list of JSON objects representing the prompts to send to the LLM.
+        prompts (list<dict>): A list of JSON objects representing the prompts to send to the LLM.
         
     Returns:
-        list<json>: A list of JSON objects representing the responses from the LLM.
+        list<dict>: A list of JSON objects representing the responses from the LLM.
     """
 
     llm_client = LLMClient(None)

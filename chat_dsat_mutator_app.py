@@ -33,24 +33,31 @@ options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Nega
 mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
 disable_button = (json_chat_sample is None) or (mutation_request.strip() == "")
 
-# get the number of variants (different mutation options) requested
-st.subheader("Number of variants")
-
-st.number_input("Number of mutations", min_value=1, max_value=10, value=1, key="num_mutations")
+# TODO: get the number of variants (different mutation options) requested
+# st.subheader("Number of variants")
+# st.number_input("Number of mutations", min_value=1, max_value=10, value=1, key="num_mutations")
 
 submit_click = st.button("Submit", disabled=disable_button)
 
 st.divider()
 
 if submit_click:
+    
+    with st.spinner("Mutating chat sample..."):
+        mutations = mutate_chat_sample(str_chat_sample, mutation_request)
+
     st.subheader("Mutated variants")
-    mutations = mutate_chat_sample(str_chat_sample, mutation_request)
 
     for i, mut in enumerate(mutations):
-        st.write(f"#### Variant {i + 1}")
 
-        # TODO: add diff highlighting
-        # diff = DeepDiff(json_chat_sample, mut, view="text")
+
+        with st.expander("Preview mutation", expanded=False):
+            st.json(mut)
+
+        # show differences between mutation and original
+        diff = DeepDiff(json_chat_sample, mut, view="text")
+        with st.expander("Differences", expanded=False):
+            st.json(diff)
 
         st.download_button(
             label="Download",

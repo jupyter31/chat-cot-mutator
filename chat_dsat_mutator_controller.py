@@ -104,7 +104,7 @@ def get_core_prompt(mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object but randomise and shuffle the order of the passages in the tool content. Do not return anything else. \n {json.dumps(messages)}"
+                        "content": "Return the whole JSON object but randomise and shuffle the order of the passages in the tool content."
                     }
                 ]
             }

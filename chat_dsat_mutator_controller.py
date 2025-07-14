@@ -1,19 +1,16 @@
 import json
 from llm_api_client import LLMClient
 
-def mutate_chat_sample(chat_sample, mutation_request):
+def get_core_prompt(mutation_request):
     """
-    Mutates the chat sample based on the mutation request.
+    Returns the core prompt for the mutation request.
     
     Args:
-        chat_sample (str): The chat sample in JSON format.
         mutation_request (str): The type of mutation to apply.
         
     Returns:
-        json: The mutated chat samples in JSON format.
+        json: The core prompt for the mutation request.
     """
-
-    messages = json.loads(chat_sample)["messages"]
 
     match mutation_request:
         case "Salience removal":
@@ -22,7 +19,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             This means that we remove passages from the context that have the largest influence on the answer.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -45,7 +42,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             This is done to add noise to the prompt and the tool content.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -63,7 +60,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Negated-evidence injection involves injecting a passage that contradicts the answer.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -81,7 +78,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Date / number jitter involves making date-swap and number-swap edits.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -99,7 +96,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Passage shuffle randomises the passage order to test position bias.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -117,7 +114,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Entity swaooing involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -139,7 +136,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -169,7 +166,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             This means that the LLM does not have the the ability to access these information sources.
             '''
 
-            request_data = {
+            return {
                 "messages": [
                     {
                         "role": "system",
@@ -184,23 +181,49 @@ def mutate_chat_sample(chat_sample, mutation_request):
 
         case _:
             raise ValueError(f"Unknown mutation request: {mutation_request}")
+
+def mutate_chat_samples(split_str_chat_samples, mutation_request):
+    """
+    Mutates the chat sample based on the mutation request.
     
-    # pad the request_data with generic useful information for the LLM
-    request_data["messages"][1]["content"] = f"You are given the messages component of a JSON object used by an LLM. {request_data["messages"][1]["content"]} Do not return anything else. \n Messages : {json.dumps(messages)}"
-    response = call_llm_api(request_data)
+    Args:
+        split_str_chat_samples (list<str>): A list of strings representing individual chat samples.
+        mutation_request (str): The type of mutation to apply.
+        
+    Returns:
+        list<json>: A list of JSON objects of the mutated chat samples.
+    """
+    prompts = []
+    for sample in split_str_chat_samples:
+        prompt = get_core_prompt(mutation_request)
+        prompt["messages"][1]["content"] = f"You are given the messages component of a JSON object used by an LLM. {prompt["messages"][1]["content"]} Do not return anything else. \n Messages : {json.loads(sample)["messages"]}"
+        prompts.append(prompt)
 
-    mutated_chat_sample = json.loads(chat_sample)
-    mutated_chat_sample["messages"] = json.loads(response)["messages"]
+    responses = call_llm_api(prompts)
 
-    return [mutated_chat_sample]
+    mutated_chat_samples = [
+        {**json.loads(sample), "messages": json.loads(response["choices"][0]["message"]["content"])["messages"]} 
+        for sample, response in zip(split_str_chat_samples, responses)
+    ]
+
+    return mutated_chat_samples
 
 
-def call_llm_api(prompt):
+def call_llm_api(prompts):
+    """
+    Calls the LLM API with the provided prompts.
+    
+    Args:
+        prompts (list<json>): A list of JSON objects representing the prompts to send to the LLM.
+        
+    Returns:
+        list<json>: A list of JSON objects representing the responses from the LLM.
+    """
+
     llm_client = LLMClient(None)
 
-    request_data = prompt
-    response = llm_client.send_chat_request("dev-gpt-4o-gg", request_data)
+    responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", prompts)
 
-    return response["choices"][0]["message"]["content"]
+    return responses
 
 

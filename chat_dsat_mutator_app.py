@@ -1,25 +1,35 @@
 import streamlit as st
 import json
 from deepdiff import DeepDiff
-from chat_dsat_mutator_controller import mutate_chat_sample
+from chat_dsat_mutator_controller import mutate_chat_samples
 
 
 st.header("Synthetic Chat-Data Mutation Framework")
 
 # get chat sample input from file upload or text area
-st.subheader("Chat sample")
-uploaded_file = st.file_uploader("Upload a chat sample JSON file", type=["json"])
+st.subheader("Chat samples")
+st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
+uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
+filename = uploaded_file.name.strip() if (uploaded_file is not None) else ""
 
-str_chat_sample = uploaded_file.read().decode("utf-8") if (uploaded_file is not None) else st.text_area("Paste chat sample here", height=170)
-json_chat_sample = None
+str_chat_samples = uploaded_file.read().decode("utf-8").strip() if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip()
 
-if str_chat_sample.strip() != "":
-    try:
-        json_chat_sample = json.loads(str_chat_sample)
-    except json.JSONDecodeError as e:
-        json_chat_sample = None
-        st.error(f"Invalid JSON format: {e}")
+valid_samples = False
+
+if str_chat_samples != "":
+    valid_samples = True
+    split_str_chat_samples = str_chat_samples.split("\n")
+    json_chat_samples = []
+
+    for str_sample in split_str_chat_samples:
+        try:
+            json_sample = json.loads(str_sample)
+            json_chat_samples.append(json_sample)
+        except json.JSONDecodeError as e:
+            valid_samples = False
+            st.error(f"Invalid JSON format: {e}")
+            break
 
 # get mutation request
 st.subheader("Mutation request")
@@ -31,7 +41,7 @@ st.subheader("Mutation request")
 
 options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
-disable_button = (json_chat_sample is None) or (mutation_request.strip() == "")
+disable_button = (not valid_samples) or (mutation_request.strip() == "")
 
 # TODO: get the number of variants (different mutation options) requested
 # st.subheader("Number of variants")
@@ -43,28 +53,37 @@ st.divider()
 
 if submit_click:
     
-    with st.spinner("Mutating chat sample..."):
-        mutations = mutate_chat_sample(str_chat_sample, mutation_request)
+    with st.spinner("Mutating chat samples..."):
+        mutations = mutate_chat_samples(split_str_chat_samples, mutation_request)
 
-    st.subheader("Mutated variants")
+    st.subheader("Mutated chat samples")
+
+    st.download_button(
+        label="Download ALL mutated chat samples (.jsonl)",
+        data="\n".join([json.dumps(mut) for mut in mutations]),
+        file_name=f"{filename}_mutated_samples.jsonl",
+        mime="application/jsonl"
+    )
+
+    st.divider()
 
     for i, mut in enumerate(mutations):
-        st.markdown(f"#### Variant {i + 1}")
+        st.markdown(f"#### Chat sample {i + 1}")
 
         # collapsible preview of mutated chat sample
         with st.expander("Preview mutation", expanded=False):
             st.json(mut)
 
         # show differences between mutation and original
-        diff = DeepDiff(json_chat_sample, mut, view="text")
+        diff = DeepDiff(json_chat_samples[i], mut, view="text")
         with st.expander("Differences", expanded=False):
             st.json(diff)
     
         # download button for the mutated chat sample
         st.download_button(
-            label="Download",
+            label=f"Download mutation of chat sample {i+1} (.json)",
             data=json.dumps(mut, indent=2),
-            file_name=f"mutated_variant_{i+1}.json",
+            file_name=f"{filename}_mutated_sample_{i+1}.json",
             mime="application/json"
         )
 

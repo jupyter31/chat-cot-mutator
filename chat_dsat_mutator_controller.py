@@ -104,7 +104,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that performs entity swapping on the chat sample. This involves replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact."
+                        "content": "You are a helpful assistant that performs entity swapping on given data. This involves replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact."
                     },
                     {
                         "role": "user",
@@ -144,8 +144,23 @@ def mutate_chat_sample(chat_sample, mutation_request):
         ]
     }
         case "Ablate URL links":
-            # TODO
-            pass
+            '''
+            Ablate URL links involves removing all URLs from the chat sample.
+            This means that the LLM does not have the the ability to access these information sources.
+            '''
+
+            request_data = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that removes all URLs from given data."
+                    },
+                    {
+                        "role": "user",
+                        "content": "Return the whole JSON object with any URLs and their surrounding phrase context removed."
+                    }
+                ]
+            }
         case _:
             raise ValueError(f"Unknown mutation request: {mutation_request}")
     

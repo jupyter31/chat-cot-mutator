@@ -37,7 +37,8 @@ def mutate_chat_sample(chat_sample, mutation_request):
 
         case "Claim-aligned deletion":
             # TODO
-            pass                     
+            pass 
+
         case "Topic dilution":
             '''
             Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
@@ -92,9 +93,25 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     }
                 ]
             }
+
         case "Passage shuffle":
-            # TODO
-            pass
+            '''
+            Passage shuffle randomises the passage order to test position bias.
+            '''
+            
+            request_data = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that shuffles the order of passages in given data."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"You are given the messages component of a JSON object used by an LLM. Return the whole JSON object but randomise and shuffle the order of the passages in the tool content. Do not return anything else. \n {json.dumps(messages)}"
+                    }
+                ]
+            }
+
         case "Entity swap":
             '''
             Entity swaooing involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
@@ -112,9 +129,11 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     }
                 ]
             }
+
         case "Document-snippet cut-off":
             # TODO
             pass
+
         case "Unit-conversion rewrite":
             '''
             Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
@@ -141,8 +160,9 @@ def mutate_chat_sample(chat_sample, mutation_request):
                         "role": "user",
                         "content": "Return the whole JSON object whilst changing any units used in the tool content to a different unit that measures the same type of quantity, leaving the numerical value unchanged."
                     }
-        ]
-    }
+                ]
+            }
+
         case "Ablate URL links":
             '''
             Ablate URL links involves removing all URLs from the chat sample.
@@ -161,6 +181,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
                     }
                 ]
             }
+
         case _:
             raise ValueError(f"Unknown mutation request: {mutation_request}")
     

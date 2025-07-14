@@ -94,14 +94,45 @@ def mutate_chat_sample(chat_sample, mutation_request):
             # TODO
             pass
         case "Entity swap":
-            # TODO
-            pass
+            request_data = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that performs entity swapping on the chat sample. This involves replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact."
+                    },
+                    {
+                        "role": "user",
+                        "content": "Return the whole JSON object with specific entities replaced with different entities of the same type."
+                    }
+                ]
+            }
         case "Document-snippet cut-off":
             # TODO
             pass
         case "Unit-conversion rewrite":
-            # TODO
-            pass
+            request_data = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": """
+                            You are a helpful assistant that changes each unit to a different unit that measure the same type of quantity without changing the numerical value. You do not perform mathematical conversions, you simply swap the unit for a different one in the same category.
+                            Examples:
+                            - Original: The distance is 5 kilometers.
+                            - Modified: The distance is 5 miles.
+
+                            - Original: The temperature is 20 degrees Celsius.
+                            - Modified: The temperature is 20 degrees Fahrenheit.
+
+                            - Original: She is 12 years old.
+                            - Modified: She is 12 months old.
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": "Return the whole JSON object whilst changing any units used in the tool content to a different unit that measures the same type of quantity, leaving the numerical value unchanged."
+                    }
+        ]
+    }
         case "Ablate URL links":
             # TODO
             pass
@@ -109,7 +140,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             raise ValueError(f"Unknown mutation request: {mutation_request}")
     
     # pad the request_data with generic useful information for the LLM
-    request_data = f"You are given the messages component of a JSON object used by an LLM. {request_data} Do not return anything else. \n Messages : {json.dumps(messages)}"
+    request_data["messages"][1]["content"] = f"You are given the messages component of a JSON object used by an LLM. {request_data["messages"][1]["content"]} Do not return anything else. \n Messages : {json.dumps(messages)}"
     response = call_llm_api(request_data)
     print(response)
 

@@ -21,6 +21,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             Salience removal involves deleting the passage whose tokens have the largest attribution with respect to the answer.
             This means that we remove passages from the context that have the largest influence on the answer.
             '''
+
             request_data = {
                 "messages": [
                     {
@@ -60,6 +61,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             '''
             Negated-evidence injection involves injecting a passage that contradicts the answer.
             '''
+
             request_data = {
                 "messages": [
                     {
@@ -94,6 +96,10 @@ def mutate_chat_sample(chat_sample, mutation_request):
             # TODO
             pass
         case "Entity swap":
+            '''
+            Entity swaooing involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
+            '''
+
             request_data = {
                 "messages": [
                     {
@@ -110,12 +116,16 @@ def mutate_chat_sample(chat_sample, mutation_request):
             # TODO
             pass
         case "Unit-conversion rewrite":
+            '''
+            Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
+            '''
+
             request_data = {
                 "messages": [
                     {
                         "role": "system",
                         "content": """
-                            You are a helpful assistant that changes each unit to a different unit that measure the same type of quantity without changing the numerical value. You do not perform mathematical conversions, you simply swap the unit for a different one in the same category.
+                            You are a helpful assistant that changes each unit to a different unit that measures the same type of quantity without changing the numerical value. You do not perform mathematical conversions, you simply swap the unit for a different one in the same category.
                             Examples:
                             - Original: The distance is 5 kilometers.
                             - Modified: The distance is 5 miles.

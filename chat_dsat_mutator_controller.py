@@ -98,7 +98,7 @@ def mutate_chat_sample(chat_sample, mutation_request):
             '''
             Passage shuffle randomises the passage order to test position bias.
             '''
-            
+
             request_data = {
                 "messages": [
                     {
@@ -188,10 +188,9 @@ def mutate_chat_sample(chat_sample, mutation_request):
     # pad the request_data with generic useful information for the LLM
     request_data["messages"][1]["content"] = f"You are given the messages component of a JSON object used by an LLM. {request_data["messages"][1]["content"]} Do not return anything else. \n Messages : {json.dumps(messages)}"
     response = call_llm_api(request_data)
-    print(response)
 
     mutated_chat_sample = json.loads(chat_sample)
-    mutated_chat_sample["messages"] = response
+    mutated_chat_sample["messages"] = json.loads(response)["messages"]
 
     return [mutated_chat_sample]
 

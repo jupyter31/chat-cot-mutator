@@ -49,8 +49,9 @@ if submit_click:
     st.subheader("Mutated variants")
 
     for i, mut in enumerate(mutations):
+        st.markdown(f"#### Variant {i + 1}")
 
-
+        # collapsible preview of mutated chat sample
         with st.expander("Preview mutation", expanded=False):
             st.json(mut)
 
@@ -58,11 +59,14 @@ if submit_click:
         diff = DeepDiff(json_chat_sample, mut, view="text")
         with st.expander("Differences", expanded=False):
             st.json(diff)
-
+    
+        # download button for the mutated chat sample
         st.download_button(
             label="Download",
             data=json.dumps(mut, indent=2),
             file_name=f"mutated_variant_{i+1}.json",
             mime="application/json"
         )
+
+        st.divider()
 

@@ -1,5 +1,5 @@
 import json
-from llm_api_sample import LLMClient
+from llm_api_client import LLMClient
 
 def mutate_chat_sample(chat_sample, mutation_request):
     """

@@ -34,18 +34,12 @@ if str_chat_samples != "":
 # get mutation request
 st.subheader("Mutation request")
 
-# TODO : get plain English mutation requests
-# mutation_request = ""
-# mutation_request = st.text_input("Enter mutation request", placeholder="e.g. 'Perform entity swapping on the chat sample'")
-# disable_button = (not valid_sample) or (chat_sample == "") or (mutation_request.strip() == "")
-
 options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
-mutation_request = st.selectbox("Select mutation type", options, accept_new_options=False)
-disable_button = (not valid_samples) or (mutation_request.strip() == "")
+mutation_request_selectbox = st.selectbox("Select mutation type", options, accept_new_options=False, index=None)
+mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
 
-# TODO: get the number of variants (different mutation options) requested
-# st.subheader("Number of variants")
-# st.number_input("Number of mutations", min_value=1, max_value=10, value=1, key="num_mutations")
+# determine whether the submit button should be disabled
+disable_button = (not valid_samples) or (mutation_request.strip() == "")
 
 submit_click = st.button("Submit", disabled=disable_button)
 

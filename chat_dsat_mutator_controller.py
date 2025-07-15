@@ -14,10 +14,10 @@ def get_core_prompt(mutation_request):
 
     match mutation_request:
         case "Salience removal":
-            '''
-            Salience removal involves deleting the passage whose tokens have the largest attribution with respect to the answer.
-            This means that we remove passages from the context that have the largest influence on the answer.
-            '''
+
+            # Salience removal involves deleting the passage whose tokens have the largest attribution with respect to the answer.
+            # This means that we remove passages from the context that have the largest influence on the answer.
+
 
             return {
                 "messages": [
@@ -37,10 +37,10 @@ def get_core_prompt(mutation_request):
             pass 
 
         case "Topic dilution":
-            '''
-            Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
-            This is done to add noise to the prompt and the tool content.
-            '''
+
+            # Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
+            # This is done to add noise to the prompt and the tool content.
+
 
             return {
                 "messages": [
@@ -56,9 +56,8 @@ def get_core_prompt(mutation_request):
             }
 
         case "Negated-evidence injection":
-            '''
-            Negated-evidence injection involves injecting a passage that contradicts the answer.
-            '''
+
+            # Negated-evidence injection involves injecting a passage that contradicts the answer.
 
             return {
                 "messages": [
@@ -74,9 +73,8 @@ def get_core_prompt(mutation_request):
             }
 
         case "Date / number jitter":
-            '''
-            Date / number jitter involves making date-swap and number-swap edits.
-            '''
+
+            # Date / number jitter involves making date-swap and number-swap edits.
 
             return {
                 "messages": [
@@ -92,9 +90,8 @@ def get_core_prompt(mutation_request):
             }
 
         case "Passage shuffle":
-            '''
-            Passage shuffle randomises the passage order to test position bias.
-            '''
+
+            # Passage shuffle randomises the passage order to test position bias.
 
             return {
                 "messages": [
@@ -110,9 +107,8 @@ def get_core_prompt(mutation_request):
             }
 
         case "Entity swap":
-            '''
-            Entity swaooing involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
-            '''
+
+            # Entity swaooing involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
 
             return {
                 "messages": [
@@ -132,9 +128,8 @@ def get_core_prompt(mutation_request):
             pass
 
         case "Unit-conversion rewrite":
-            '''
-            Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
-            '''
+
+            # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
 
             return {
                 "messages": [
@@ -161,10 +156,9 @@ def get_core_prompt(mutation_request):
             }
 
         case "Ablate URL links":
-            '''
-            Ablate URL links involves removing all URLs from the chat sample.
-            This means that the LLM does not have the the ability to access these information sources.
-            '''
+
+            # Ablate URL links involves removing all URLs from the chat sample.
+            # This means that the LLM does not have the the ability to access these information sources.
 
             return {
                 "messages": [
@@ -180,7 +174,22 @@ def get_core_prompt(mutation_request):
             }
 
         case _:
-            raise ValueError(f"Unknown mutation request: {mutation_request}")
+
+            # Default case for free-form mutation requests
+
+            return {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that performs the mutation request as specified by the user."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Return the whole JSON object with the following mutation applied: {mutation_request}."
+                    }
+                ]
+            }
+
 
 def mutate_chat_samples(split_str_chat_samples, mutation_request):
     """
@@ -225,5 +234,4 @@ def call_llm_api(prompts):
     responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", prompts)
 
     return responses
-
 

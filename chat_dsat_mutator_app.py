@@ -1,8 +1,24 @@
 import streamlit as st
 import json
 from deepdiff import DeepDiff
-from chat_dsat_mutator_controller import mutate_chat_samples
+from chat_dsat_mutator_controller import mutate_chat_samples, mutate_chat_samples_given_prompts
 
+# initialise session state with default values
+def init_session_state(default_states):
+    for state, default in default_states.items():
+        if state not in st.session_state:
+            st.session_state[state] = default
+
+init_session_state({
+    "submit_click": False,
+    "retry_click": False,
+    "modified_prompts": None,
+    "mutations": None,
+    "prompts": None
+})
+
+valid_samples = False
+valid_prompts = False
 
 st.header("Synthetic Chat-Data Mutation Framework")
 
@@ -15,21 +31,17 @@ filename = uploaded_file.name.strip() if (uploaded_file is not None) else ""
 
 str_chat_samples = uploaded_file.read().decode("utf-8").strip() if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip()
 
-valid_samples = False
-
+# validate chat samples
 if str_chat_samples != "":
     valid_samples = True
     split_str_chat_samples = str_chat_samples.split("\n")
     json_chat_samples = []
 
-    for str_sample in split_str_chat_samples:
-        try:
-            json_sample = json.loads(str_sample)
-            json_chat_samples.append(json_sample)
-        except json.JSONDecodeError as e:
-            valid_samples = False
-            st.error(f"Invalid JSON format: {e}")
-            break
+    try:
+        json_chat_samples = [json.loads(str_sample) for str_sample in split_str_chat_samples]
+    except json.JSONDecodeError as e:
+        valid_samples = False
+        st.error(f"Invalid JSON format: {e}")
 
 # get mutation request
 st.subheader("Mutation request")
@@ -39,29 +51,74 @@ mutation_request_selectbox = st.selectbox("Select mutation type", options, accep
 mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
 
 # determine whether the submit button should be disabled
-disable_button = (not valid_samples) or (mutation_request.strip() == "")
+disable_submit_button = (not valid_samples) or (mutation_request.strip() == "")
 
-submit_click = st.button("Submit", disabled=disable_button)
+submit = st.button("Submit", disabled=disable_submit_button)
+if submit:
+    st.session_state.submit_click = True
+    st.session_state.retry_click = False
 
 st.divider()
 
-if submit_click:
+if st.session_state.submit_click or st.session_state.retry_click:
     
     with st.spinner("Mutating chat samples..."):
-        mutations = mutate_chat_samples(split_str_chat_samples, mutation_request)
+        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_str_chat_samples, mutation_request) if st.session_state.submit_click else mutate_chat_samples_given_prompts(split_str_chat_samples, st.session_state["modified_prompts"])
+        st.session_state.submit_click = False
+        st.session_state.retry_click = False
+
+if st.session_state.mutations is not None:
+
+    st.subheader("Mutation prompt")
+    st.write("The prompt below was used to produce the mutations. You can use it to understand how the mutations were generated or to modify it for further mutations.")
+
+    # allow mutation prompt to be modified
+    with st.expander("Prompts", expanded=True):
+        new_prompts = st.text_area(
+            "Prompts",
+            value="\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.prompts]),
+            height=300,
+            disabled=False,
+            label_visibility="hidden"
+        )
+
+        prompts_modified = (new_prompts != "\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.prompts]))
+
+        # validate the new prompts
+        if prompts_modified:
+            valid_prompts = True
+            try:
+                split_json_new_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]
+            except json.JSONDecodeError as e:
+                valid_prompts = False
+                st.error(f"Invalid JSON format in prompts: {e}")
+
+        disable_retry_button = (not valid_prompts) or (not prompts_modified)
+        retry = st.button("Regenerate mutations with modified prompts", disabled=disable_retry_button)
+
+        if retry:
+            st.session_state.modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]
+            st.session_state.mutations = None           
+            st.session_state.retry_click = True
+            st.session_state.submit_click = False
+
+    st.divider()
+
+if st.session_state.mutations is not None:
 
     st.subheader("Mutated chat samples")
 
+    # download button for all mutates chat samples
     st.download_button(
         label="Download ALL mutated chat samples (.jsonl)",
-        data="\n".join([json.dumps(mut) for mut in mutations]),
+        data="\n".join([json.dumps(mut) for mut in st.session_state.mutations]),
         file_name=f"{filename}_mutated_samples.jsonl",
         mime="application/jsonl"
     )
 
     st.divider()
 
-    for i, mut in enumerate(mutations):
+    for i, mut in enumerate(st.session_state.mutations):
         st.markdown(f"#### Chat sample {i + 1}")
 
         # collapsible preview of mutated chat sample

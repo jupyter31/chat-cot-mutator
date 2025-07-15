@@ -1,13 +1,14 @@
 import json
 from llm_api_client import LLMClient
 
+
 def get_core_prompt(mutation_request):
     """
     Returns the core prompt for the mutation request.
-    
+
     Args:
         mutation_request (str): The type of mutation to apply.
-        
+
     Returns:
         json: The core prompt for the mutation request.
     """
@@ -18,40 +19,38 @@ def get_core_prompt(mutation_request):
             # Salience removal involves deleting the passage whose tokens have the largest attribution with respect to the answer.
             # This means that we remove passages from the context that have the largest influence on the answer.
 
-
             return {
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that removes the most salient passage from the tool content that is most relevant to producing the assistant golden response."
+                        "content": "You are a helpful assistant that removes the most salient passage from the tool content that is most relevant to producing the assistant golden response.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the most salient passages of the tool content with respect to the assistant golden answer removed."
-                    }
+                        "content": "Return the whole JSON object with the most salient passages of the tool content with respect to the assistant golden answer removed.",
+                    },
                 ]
             }
 
         case "Claim-aligned deletion":
             # TODO
-            pass 
+            pass
 
         case "Topic dilution":
 
             # Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
             # This is done to add noise to the prompt and the tool content.
 
-
             return {
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that rewrites text with spelling errors, keyboard proximity errors, and visual similarity errors. Keyboard proximity errors are errors that occur when a user accidentally types a key that is close to the intended key on the keyboard. Visual similarity errors are errors that occur when a user types a character that looks similar to the intended character, such as '0' instead of 'O' or '1' instead of 'l'."
+                        "content": "You are a helpful assistant that rewrites text with spelling errors, keyboard proximity errors, and visual similarity errors. Keyboard proximity errors are errors that occur when a user accidentally types a key that is close to the intended key on the keyboard. Visual similarity errors are errors that occur when a user types a character that looks similar to the intended character, such as '0' instead of 'O' or '1' instead of 'l'.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors."
-                    }
+                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors.",
+                    },
                 ]
             }
 
@@ -63,12 +62,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that negates a given passage whilst maintaining correct grammar."
+                        "content": "You are a helpful assistant that negates a given passage whilst maintaining correct grammar.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the salient passages of the tool content with respect to the assistant golden answer replaced with the negation of the assistant golden answer."
-                    }
+                        "content": "Return the whole JSON object with the salient passages of the tool content with respect to the assistant golden answer replaced with the negation of the assistant golden answer.",
+                    },
                 ]
             }
 
@@ -80,12 +79,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that introduces date and number jitter to given data."
+                        "content": "You are a helpful assistant that introduces date and number jitter to given data.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to introduce date and number jitter."
-                    }
+                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to introduce date and number jitter.",
+                    },
                 ]
             }
 
@@ -97,12 +96,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that shuffles the order of passages in given data."
+                        "content": "You are a helpful assistant that shuffles the order of passages in given data.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object but randomise and shuffle the order of the passages in the tool content."
-                    }
+                        "content": "Return the whole JSON object but randomise and shuffle the order of the passages in the tool content.",
+                    },
                 ]
             }
 
@@ -114,12 +113,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that performs entity swapping on given data. This involves replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact."
+                        "content": "You are a helpful assistant that performs entity swapping on given data. This involves replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with specific entities replaced with different entities of the same type."
-                    }
+                        "content": "Return the whole JSON object with specific entities replaced with different entities of the same type.",
+                    },
                 ]
             }
 
@@ -146,12 +145,12 @@ def get_core_prompt(mutation_request):
 
                             - Original: She is 12 years old.
                             - Modified: She is 12 months old.
-                        """
+                        """,
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object whilst changing any units used in the tool content to a different unit that measures the same type of quantity, leaving the numerical value unchanged."
-                    }
+                        "content": "Return the whole JSON object whilst changing any units used in the tool content to a different unit that measures the same type of quantity, leaving the numerical value unchanged.",
+                    },
                 ]
             }
 
@@ -164,12 +163,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that removes all URLs from given data."
+                        "content": "You are a helpful assistant that removes all URLs from given data.",
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with any URLs and their surrounding phrase context removed."
-                    }
+                        "content": "Return the whole JSON object with any URLs and their surrounding phrase context removed.",
+                    },
                 ]
             }
 
@@ -181,12 +180,12 @@ def get_core_prompt(mutation_request):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that performs the mutation request as specified by the user."
+                        "content": "You are a helpful assistant that performs the mutation request as specified by the user.",
                     },
                     {
                         "role": "user",
-                        "content": f"Return the whole JSON object with the following mutation applied: {mutation_request}."
-                    }
+                        "content": f"Return the whole JSON object with the following mutation applied: {mutation_request}.",
+                    },
                 ]
             }
 
@@ -194,13 +193,14 @@ def get_core_prompt(mutation_request):
 def mutate_chat_samples(split_str_chat_samples, mutation_request):
     """
     Mutates the chat sample based on the mutation request.
-    
+
     Args:
         split_str_chat_samples (list<str>): A list of strings representing individual chat samples.
         mutation_request (str): The type of mutation to apply.
-        
+
     Returns:
-        list<dict>: A list of JSON objects of the mutated chat samples.
+        list<dict>: A list of JSON objects representing the prompts used to perform the mutations.
+        list<dict>: A list of JSON objects representing the mutated chat samples.
     """
     prompts = []
     for sample in split_str_chat_samples:
@@ -211,20 +211,47 @@ def mutate_chat_samples(split_str_chat_samples, mutation_request):
     responses = call_llm_api(prompts)
 
     mutated_chat_samples = [
-        {**json.loads(sample), "messages": json.loads(response["choices"][0]["message"]["content"])["messages"]} 
+        {
+            **json.loads(sample),
+            "messages": json.loads(response["choices"][0]["message"]["content"])["messages"],
+        }
         for sample, response in zip(split_str_chat_samples, responses)
     ]
 
-    return mutated_chat_samples
+    return (mutated_chat_samples, prompts)
+
+
+def mutate_chat_samples_given_prompts(split_str_chat_samples, modified_prompts):
+    """
+    Mutates the chat samples using the provided modified prompts.
+
+    Args:
+        split_str_chat_samples (list<str>): A list of strings representing individual chat samples.
+        modified_prompts (list<dict>): A list of JSON objects representing the modified prompts.
+
+    Returns:
+        list<dict>: A list of JSON objects representing the mutated chat samples.
+    """
+    responses = call_llm_api(modified_prompts)
+
+    mutated_chat_samples = [
+        {
+            **json.loads(sample),
+            "messages": json.loads(response["choices"][0]["message"]["content"])["messages"],
+        }
+        for sample, response in zip(split_str_chat_samples, responses)
+    ]
+
+    return (mutate_chat_samples, modified_prompts)
 
 
 def call_llm_api(prompts):
     """
     Calls the LLM API with the provided prompts.
-    
+
     Args:
         prompts (list<dict>): A list of JSON objects representing the prompts to send to the LLM.
-        
+
     Returns:
         list<dict>: A list of JSON objects representing the responses from the LLM.
     """
@@ -234,4 +261,3 @@ def call_llm_api(prompts):
     responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", prompts)
 
     return responses
-

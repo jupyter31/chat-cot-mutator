@@ -1,6 +1,7 @@
-import streamlit as st
-import json
 from deepdiff import DeepDiff
+import json
+import streamlit as st
+
 from chat_dsat_mutator_controller import mutate_chat_samples, mutate_chat_samples_given_prompts
 
 # initialise session state with default values
@@ -12,13 +13,14 @@ def init_session_state(default_states):
 init_session_state({
     "submit_click": False,
     "retry_click": False,
-    "modified_prompts": None,
     "mutations": None,
-    "prompts": None
+    "prompts": None,
+    "modified_prompts": None,
 })
 
 valid_samples = False
 valid_prompts = False
+
 
 st.header("Synthetic Chat-Data Mutation Framework")
 
@@ -54,21 +56,17 @@ mutation_request = mutation_request_selectbox if mutation_request_selectbox is n
 disable_submit_button = (not valid_samples) or (mutation_request.strip() == "")
 
 submit = st.button("Submit", disabled=disable_submit_button)
+
+st.divider()
+
 if submit:
     st.session_state.submit_click = True
     st.session_state.retry_click = False
 
-st.divider()
-
-if st.session_state.submit_click or st.session_state.retry_click:
-    
     with st.spinner("Mutating chat samples..."):
-        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_str_chat_samples, mutation_request) if st.session_state.submit_click else mutate_chat_samples_given_prompts(split_str_chat_samples, st.session_state["modified_prompts"])
-        st.session_state.submit_click = False
-        st.session_state.retry_click = False
+        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_str_chat_samples, mutation_request)
 
-if st.session_state.mutations is not None:
-
+if st.session_state.submit_click:
     st.subheader("Mutation prompt")
     st.write("The prompt below was used to produce the mutations. You can use it to understand how the mutations were generated or to modify it for further mutations.")
 
@@ -96,15 +94,17 @@ if st.session_state.mutations is not None:
         disable_retry_button = (not valid_prompts) or (not prompts_modified)
         retry = st.button("Regenerate mutations with modified prompts", disabled=disable_retry_button)
 
-        if retry:
-            st.session_state.modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]
-            st.session_state.mutations = None           
-            st.session_state.retry_click = True
-            st.session_state.submit_click = False
-
     st.divider()
 
-if st.session_state.mutations is not None:
+    if retry:
+        st.session_state.modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]         
+        st.session_state.retry_click = True
+        st.session_state.submit_click = False
+        
+        with st.spinner("Mutating chat samples..."):
+            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_str_chat_samples, st.session_state["modified_prompts"])
+
+if st.session_state.submit_click or st.session_state.retry_click:
 
     st.subheader("Mutated chat samples")
 

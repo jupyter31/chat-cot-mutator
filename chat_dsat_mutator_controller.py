@@ -1,7 +1,6 @@
 import json
 from llm_api_client import LLMClient
 
-
 def get_core_prompt(mutation_request):
     """
     Returns the core prompt for the mutation request.
@@ -242,7 +241,7 @@ def mutate_chat_samples_given_prompts(split_str_chat_samples, modified_prompts):
         for sample, response in zip(split_str_chat_samples, responses)
     ]
 
-    return (mutate_chat_samples, modified_prompts)
+    return (mutated_chat_samples, modified_prompts)
 
 
 def call_llm_api(prompts):

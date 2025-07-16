@@ -12,3 +12,6 @@ mutations/*
 
 old-tests
 old-tests/*
+
+.venv
+.venv/*

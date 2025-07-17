@@ -48,7 +48,7 @@ def get_core_prompt(mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors.",
+                        "content": "Return the whole JSON object with the user prompt rewritten to include spelling mistakes, keyboard proximity errors, and visual similarity errors.",
                     },
                 ]
             }
@@ -82,7 +82,7 @@ def get_core_prompt(mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with the user prompt and the tool content rewritten to introduce date and number jitter.",
+                        "content": "Return the whole JSON object with the tool content rewritten to introduce date and number jitter.",
                     },
                 ]
             }
@@ -116,7 +116,7 @@ def get_core_prompt(mutation_request):
                     },
                     {
                         "role": "user",
-                        "content": "Return the whole JSON object with specific entities replaced with different entities of the same type.",
+                        "content": "Return the whole JSON object with entities in the tool content replaced with different entities of the same type. Use different entities from the tool content context in the replacement.",
                     },
                 ]
             }

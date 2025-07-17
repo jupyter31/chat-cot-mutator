@@ -15,9 +15,9 @@ init_session_state({
     "retry_click": False,
     "mutations": None,
     "prompts": None,
-    "modified_prompts": None,
 })
 
+# set default input 
 valid_samples = False
 valid_prompts = False
 
@@ -33,6 +33,7 @@ filename = uploaded_file.name.strip() if (uploaded_file is not None) else ""
 
 str_chat_samples = uploaded_file.read().decode("utf-8").strip() if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip()
 
+
 # validate chat samples
 if str_chat_samples != "":
     valid_samples = True
@@ -45,6 +46,7 @@ if str_chat_samples != "":
         valid_samples = False
         st.error(f"Invalid JSON format: {e}")
 
+
 # get mutation request
 st.subheader("Mutation request")
 
@@ -52,13 +54,16 @@ options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Nega
 mutation_request_selectbox = st.selectbox("Select mutation type", options, accept_new_options=False, index=None)
 mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
 
-# determine whether the submit button should be disabled
-disable_submit_button = (not valid_samples) or (mutation_request.strip() == "")
 
+# enabled submit button if inputs are valid and a mutation request has been provided
+disable_submit_button = (not valid_samples) or (mutation_request.strip() == "")
 submit = st.button("Submit", disabled=disable_submit_button)
+
 
 st.divider()
 
+
+# call LLM API Client when submit button is clicked
 if submit:
     st.session_state.submit_click = True
     st.session_state.retry_click = False
@@ -66,11 +71,12 @@ if submit:
     with st.spinner("Mutating chat samples..."):
         st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_str_chat_samples, mutation_request)
 
+
+# show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
 if st.session_state.submit_click:
     st.subheader("Mutation prompt")
     st.write("The prompt below was used to produce the mutations. You can use it to understand how the mutations were generated or to modify it for further mutations.")
 
-    # allow mutation prompt to be modified
     with st.expander("Prompts", expanded=True):
         new_prompts = st.text_area(
             "Prompts",
@@ -97,12 +103,12 @@ if st.session_state.submit_click:
     st.divider()
 
     if retry:
-        st.session_state.modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]         
+        modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]         
         st.session_state.retry_click = True
         st.session_state.submit_click = False
         
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_str_chat_samples, st.session_state["modified_prompts"])
+            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_str_chat_samples, modified_prompts)
 
 if st.session_state.submit_click or st.session_state.retry_click:
 

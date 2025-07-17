@@ -177,11 +177,7 @@ def mutate_chat_samples(split_json_chat_samples, mutation_request):
     """
     prompts = []
     for sample in split_json_chat_samples:
-        # remove assistant golden response if it exists
-        message_history = sample["messages"][:-1] if sample["messages"][-1]["role"] == "assistant" else sample["messages"]
-
-        # add the message to perform the mutation
-        message_history.append(get_mutation_message(mutation_request))
+        message_history = sample["messages"].append(get_mutation_message(mutation_request))
 
         prompts.append(message_history)
 

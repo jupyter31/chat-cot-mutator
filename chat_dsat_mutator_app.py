@@ -131,7 +131,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
             st.json(mut)
 
         # show differences between mutation and original
-        diff = DeepDiff(split_json_chat_samples[i], mut, view="text")
+        diff = DeepDiff(json.loads(split_str_chat_samples[i]), mut, view="text")
         with st.expander("Differences", expanded=False):
             st.json(diff)
     

@@ -107,7 +107,7 @@ if st.session_state.submit_click:
         st.session_state.submit_click = False
         
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_json_chat_samples, modified_prompts)
+            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_json_chat_samples, modified_prompts, mutation_request)
 
 if st.session_state.submit_click or st.session_state.retry_click:
 

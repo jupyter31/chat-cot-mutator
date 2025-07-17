@@ -190,21 +190,13 @@ def mutate_chat_samples(split_json_chat_samples, mutation_request):
     """
     prompts = []
     for sample in split_json_chat_samples:
-        print(sample["messages"])
-        print(get_mutation_messages(mutation_request))
         message_history = {
             "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
         }
 
-        print(message_history)
-
         prompts.append(message_history)
 
     affected_role = get_affected_role(mutation_request)
-
-    print()
-    print(prompts)
-    print()
 
     responses = call_llm_api(prompts)
 

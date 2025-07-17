@@ -38,7 +38,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Remove the most salient passage with respect to the final assistant response from the tool content in our message history. Return the new tool content.",
+                    "content": "Remove the most salient passage with respect to the final assistant response from the tool content in our message history. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -71,7 +71,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Rewrite the tool content from our message history to negate the salient passages that support the final assistant response. Return the new tool content.",
+                    "content": "Rewrite the tool content from our message history to negate the salient passages that support the final assistant response. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -85,7 +85,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Rewrite the tool content from our message history to introduce date and number jitter by replacing dates with different dates and replacing numbers for different numbers. Return the new tool content.",
+                    "content": "Rewrite the tool content from our message history to introduce date and number jitter by replacing dates with different dates and replacing numbers for different numbers. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -99,7 +99,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Rewrite the tool content from our message history to randomise and shuffle the order of the passages. Return the new tool content.",
+                    "content": "Rewrite the tool content from our message history to randomise and shuffle the order of the passages. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -113,7 +113,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Swap the entities in the tool content from our message history with other entities of the same type mentioned within our message history. Make sure to include the entities mentioned in the user prompt and assistant response in the swapping. Return the new tool content as a JSON in the original format.",
+                    "content": "Swap the entities in the tool content from our message history with other entities of the same type mentioned within our message history. Make sure to include the entities mentioned in the user prompt and assistant response in the swapping. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -142,7 +142,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Rewrite the tool content from our message history to change any unit mentioned to a different unit that measures the same type of quantity, leaving the numerical value unchanged. Return the new tool content.",
+                    "content": "Rewrite the tool content from our message history to change any unit mentioned to a different unit that measures the same type of quantity, leaving the numerical value unchanged. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -157,7 +157,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": "Rewrite the tool content from our message history to remove all URLs and their surrounding phrase context. Return the new tool content.",
+                    "content": "Rewrite the tool content from our message history to remove all URLs and their surrounding phrase context. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -171,7 +171,7 @@ def get_mutation_messages(mutation_request):
                 },
                 {
                     "role": "user",
-                    "content": f"Rewrite the tool content from our message history to include the following hallucination: {mutation_request}. Return the new tool content.",
+                    "content": f"Rewrite the tool content from our message history to include the following hallucination: {mutation_request}. Return the new tool content in the same JSON format as the original tool content, written on a single line without any indentation.",
                 }
             )
 
@@ -190,12 +190,21 @@ def mutate_chat_samples(split_json_chat_samples, mutation_request):
     """
     prompts = []
     for sample in split_json_chat_samples:
-        system_msg, user_msg = get_mutation_messages(mutation_request)
-        message_history = sample["messages"].append(system_msg).append(user_msg)
+        print(sample["messages"])
+        print(get_mutation_messages(mutation_request))
+        message_history = {
+            "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
+        }
+
+        print(message_history)
 
         prompts.append(message_history)
 
     affected_role = get_affected_role(mutation_request)
+
+    print()
+    print(prompts)
+    print()
 
     responses = call_llm_api(prompts)
 

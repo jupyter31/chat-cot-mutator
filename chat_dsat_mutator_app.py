@@ -73,12 +73,12 @@ if submit:
 
 # show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
 if st.session_state.submit_click:
-    st.subheader("Mutation prompt")
-    st.write("The prompt below was used to produce the mutations. You can use it to understand how the mutations were generated or to modify it for further mutations.")
+    st.subheader("Mutation messages")
+    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify and regenerate them.")
 
-    with st.expander("Prompts", expanded=True):
+    with st.expander("Messages", expanded=True):
         new_prompts = st.text_area(
-            "Prompts",
+            "Messages",
             value="\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.prompts]),
             height=300,
             disabled=False,

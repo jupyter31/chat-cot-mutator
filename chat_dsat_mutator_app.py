@@ -13,13 +13,13 @@ def init_session_state(default_states):
 init_session_state({
     "submit_click": False,
     "retry_click": False,
-    "mutations": None,
-    "prompts": None,
+    "mutated_chat_samples": None,
+    "mutation_messages": None,
 })
 
 # set default input 
 valid_samples = False
-valid_prompts = False
+valid_mutation_messages = False
 
 
 st.header("Synthetic Chat-Data Mutation Framework")
@@ -68,7 +68,7 @@ if submit:
     st.session_state.retry_click = False
 
     with st.spinner("Mutating chat samples..."):
-        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_json_chat_samples, mutation_request)
+        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(split_json_chat_samples, mutation_request)
 
 
 # show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
@@ -77,37 +77,37 @@ if st.session_state.submit_click:
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify and regenerate them.")
 
     with st.expander("Messages", expanded=True):
-        new_prompts = st.text_area(
+        new_mutation_messages = st.text_area(
             "Messages",
-            value="\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.prompts]),
+            value="\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.mutation_messages]),
             height=300,
             disabled=False,
             label_visibility="hidden"
         )
 
-        prompts_modified = (new_prompts != "\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.prompts]))
+        modified = (new_mutation_messages != "\n\n".join([json.dumps(prompt, indent=2) for prompt in st.session_state.mutation_messages]))
 
-        # validate the new prompts
-        if prompts_modified:
-            valid_prompts = True
+        # validate the new mutation_messages
+        if modified:
+            valid_mutation_messages = True
             try:
-                split_json_new_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]
+                split_json_new_mutation_messages = [json.loads(new_prompt) for new_prompt in new_mutation_messages.strip().split("\n\n")]
             except json.JSONDecodeError as e:
-                valid_prompts = False
-                st.error(f"Invalid JSON format in prompts: {e}")
+                valid_mutation_messages = False
+                st.error(f"Invalid JSON format in mutation messages: {e}")
 
-        disable_retry_button = (not valid_prompts) or (not prompts_modified)
-        retry = st.button("Regenerate mutations with modified prompts", disabled=disable_retry_button)
+        disable_retry_button = (not valid_mutation_messages) or (not modified)
+        retry = st.button("Regenerate mutations with modified mutation messages", disabled=disable_retry_button)
 
     st.divider()
 
     if retry:
-        modified_prompts = [json.loads(new_prompt) for new_prompt in new_prompts.strip().split("\n\n")]         
+        modified_mutation_messages = [json.loads(new_prompt) for new_prompt in new_mutation_messages.strip().split("\n\n")]         
         st.session_state.retry_click = True
         st.session_state.submit_click = False
         
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_json_chat_samples, modified_prompts, mutation_request)
+            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(split_json_chat_samples, modified_mutation_messages, mutation_request)
 
 if st.session_state.submit_click or st.session_state.retry_click:
 
@@ -116,14 +116,14 @@ if st.session_state.submit_click or st.session_state.retry_click:
     # download button for all mutates chat samples
     st.download_button(
         label="Download ALL mutated chat samples (.jsonl)",
-        data="\n".join([json.dumps(mut) for mut in st.session_state.mutations]),
+        data="\n".join([json.dumps(mut) for mut in st.session_state.mutated_chat_samples]),
         file_name=f"{filename}_mutated_samples.jsonl",
         mime="application/jsonl"
     )
 
     st.divider()
 
-    for i, mut in enumerate(st.session_state.mutations):
+    for i, mut in enumerate(st.session_state.mutated_chat_samples):
         st.markdown(f"#### Chat sample {i + 1}")
 
         # collapsible preview of mutated chat sample

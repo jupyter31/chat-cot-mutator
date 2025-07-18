@@ -1,17 +1,11 @@
-test-data
-test-data/*
-
 __pycache__
 __pycache__/*
+
+.venv
+.venv/*
 
 components-testing
 components-testing/*
 
-mutations
-mutations/*
-
-old-tests
-old-tests/*
-
-.venv
-.venv/*
+test-data
+test-data/*

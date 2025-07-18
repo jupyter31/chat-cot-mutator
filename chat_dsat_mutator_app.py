@@ -38,10 +38,9 @@ str_chat_samples = uploaded_file.read().decode("utf-8").strip() if (uploaded_fil
 if str_chat_samples != "":
     valid_samples = True
     split_str_chat_samples = str_chat_samples.split("\n")
-    json_chat_samples = []
 
     try:
-        json_chat_samples = [json.loads(str_sample) for str_sample in split_str_chat_samples]
+        split_json_chat_samples = [json.loads(str_sample) for str_sample in split_str_chat_samples]
     except json.JSONDecodeError as e:
         valid_samples = False
         st.error(f"Invalid JSON format: {e}")
@@ -69,7 +68,7 @@ if submit:
     st.session_state.retry_click = False
 
     with st.spinner("Mutating chat samples..."):
-        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_str_chat_samples, mutation_request)
+        st.session_state.mutations, st.session_state.prompts = mutate_chat_samples(split_json_chat_samples, mutation_request)
 
 
 # show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
@@ -108,7 +107,7 @@ if st.session_state.submit_click:
         st.session_state.submit_click = False
         
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_str_chat_samples, modified_prompts)
+            st.session_state.mutations, st.session_state.prompts = mutate_chat_samples_given_prompts(split_json_chat_samples, modified_prompts, mutation_request)
 
 if st.session_state.submit_click or st.session_state.retry_click:
 
@@ -132,7 +131,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
             st.json(mut)
 
         # show differences between mutation and original
-        diff = DeepDiff(json_chat_samples[i], mut, view="text")
+        diff = DeepDiff(json.loads(split_str_chat_samples[i]), mut, view="text")
         with st.expander("Differences", expanded=False):
             st.json(diff)
     

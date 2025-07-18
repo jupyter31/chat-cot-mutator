@@ -1,4 +1,4 @@
-from deepdiff import DeepDiff
+import copy
 import json
 import streamlit as st
 
@@ -67,7 +67,7 @@ st.divider()
 # call LLM API Client when submit button is clicked
 if submit:
     with st.spinner("Mutating chat samples..."):
-        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.chat_samples, st.session_state.mutation_request)
+        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
         differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
         original_responses, new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
 

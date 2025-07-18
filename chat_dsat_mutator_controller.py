@@ -1,5 +1,4 @@
 from deepdiff import DeepDiff
-import json
 from llm_api_client import llm_client
 
 def get_affected_role(mutation_request):

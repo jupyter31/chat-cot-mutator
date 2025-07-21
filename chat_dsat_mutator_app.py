@@ -134,7 +134,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
 
     st.subheader("Mutated chat samples")
 
-    # download button for all mutates chat samples
+    # add download button for all mutated chat samples
     st.download_button(
         label="Download ALL mutated chat samples (.jsonl)",
         data="\n".join([json.dumps(chat) for chat in st.session_state.mutated_chat_samples]),
@@ -142,8 +142,10 @@ if st.session_state.submit_click or st.session_state.retry_click:
         mime="application/jsonl"
     )
 
+    st.divider()
 
-    prev, curr, next = st.columns([1,2,1])
+    # define buttons for navigating through the individual chat samples
+    prev, curr, next = st.columns([2.6,4,1])
 
     with prev:
         st.button("⬅ Previous", on_click=prev_chat)
@@ -154,8 +156,10 @@ if st.session_state.submit_click or st.session_state.retry_click:
     with next:
         st.button("Next ➡", on_click=next_chat)
 
-    tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"], width="stretch")
+    # define tabs for displaying results of the mutation
+    tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"])
 
+    # add download button for mutated chat sample, and display the mutated chat sample
     with tab1:
         st.download_button(
             label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
@@ -165,11 +169,16 @@ if st.session_state.submit_click or st.session_state.retry_click:
         )
         st.json(st.session_state.mutated_chat_samples[st.session_state.chat_index])
 
+    # show differences between original and mutated chat sample
     with tab2:
         st.json(st.session_state.differences[st.session_state.chat_index])
 
+    # display original response and new response
     with tab3:
+        st.markdown("#### Original response")
         st.write(st.session_state.original_responses[st.session_state.chat_index])
+
+        st.markdown("#### New response")
         st.write(st.session_state.new_responses[st.session_state.chat_index])
 
 

@@ -4,7 +4,9 @@ import streamlit as st
 
 from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, mutate_chat_samples_given_prompts, regenerate_responses
 
-st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
+st.set_page_config(layout="wide", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
+
+COMPONENT_WIDTH = 700
 
 # initialise session state with default values
 def init_session_state(default_states):
@@ -35,7 +37,7 @@ st.header("Synthetic Chat-Data Mutation Framework")
 st.subheader("Chat samples")
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
-uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
+uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"], width=COMPONENT_WIDTH)
 filename = uploaded_file.name.strip() if (uploaded_file is not None) else ""
 
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
@@ -55,8 +57,8 @@ if raw_chat_samples != ['']:
 st.subheader("Mutation request")
 
 options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
-mutation_request_selectbox = st.selectbox("Select mutation type", options, accept_new_options=False, index=None)
-st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
+mutation_request_selectbox = st.selectbox("Select mutation type", options, accept_new_options=False, index=None, width=COMPONENT_WIDTH)
+st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'", width=COMPONENT_WIDTH).strip()
 
 
 # enabled submit button if inputs are valid and a mutation request has been provided

@@ -72,13 +72,14 @@ st.session_state.mutation_request = mutation_request_selectbox if mutation_reque
 
 # get model to use
 st.subheader("Model")
-# TODO: add more models
-model_options = ["dev-gpt-4o-gg"]
-st.session_state.model = st.selectbox("Select model", model_options, accept_new_options=False, index=0)
 
+st.session_state.model = st.text_input(
+    "To find more models to use, visit the [LLM API model list](https://substrate.microsoft.net/v2/llmApi/modelList)", 
+    value="dev-gpt-4o-gg"
+)
 
 # enabled submit button if inputs are valid and a mutation request has been provided
-disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "")
+disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (st.session_state.model.strip() == "")
 submit = st.button("Submit", disabled=disable_submit_button)
 
 

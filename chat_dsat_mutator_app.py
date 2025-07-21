@@ -19,6 +19,9 @@ init_session_state({
     "mutation_request": None,
     "mutated_chat_samples": None,
     "mutation_messages": None,
+    "differences": None,
+    "original_responses": None,
+    "new_responses": None,
 })
 
 # set default input 
@@ -68,8 +71,8 @@ st.divider()
 if submit:
     with st.spinner("Mutating chat samples..."):
         st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
-        differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-        original_responses, new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
+        st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
+        st.session_state.original_responses, st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
 
         st.session_state.submit_click = True
         st.session_state.retry_click = False
@@ -108,9 +111,9 @@ if st.session_state.submit_click:
 
     if retry:        
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.chat_samples, modified_mutation_messages, st.session_state.mutation_request)
-            differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-            new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
+            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
+            st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
+            st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
 
             st.session_state.retry_click = True
             st.session_state.submit_click = False
@@ -138,7 +141,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
 
         # show differences between mutation and original
         with st.expander("Differences", expanded=False):
-            st.json(differences[i])
+            st.json(st.session_state.differences[i])
     
         # download button for the mutated chat sample
         st.download_button(

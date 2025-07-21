@@ -88,13 +88,19 @@ st.divider()
 
 # call LLM API Client when submit button is clicked
 if submit:
-    with st.spinner("Mutating chat samples..."):
-        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
-        st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-        st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
+    st.session_state.submit_click = False
+    st.session_state.retry_click = False
 
-        st.session_state.submit_click = True
-        st.session_state.retry_click = False
+    with st.spinner("Mutating chat samples..."):
+        try:
+            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
+            st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
+            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
+
+            st.session_state.submit_click = True
+            st.session_state.retry_click = False
+        except Exception as e:
+            st.error(e)
 
 
 # show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
@@ -127,12 +133,15 @@ if st.session_state.submit_click:
 
     if retry:        
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
-            st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
+            try:
+                st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
+                st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
+                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
 
-            st.session_state.retry_click = True
-            st.session_state.submit_click = False
+                st.session_state.retry_click = True
+                st.session_state.submit_click = False
+            except Exception as e:
+                st.error(e)
 
 if st.session_state.submit_click or st.session_state.retry_click:
 

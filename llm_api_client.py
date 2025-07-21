@@ -22,7 +22,6 @@ class LLMClient:
         if endpoint != None:
             LLMClient._ENDPOINT = endpoint
         LLMClient._ENDPOINT += self._API
-        self.retry = 3
 
     def send_chat_request(self, model_name, request):
         # get the token
@@ -37,30 +36,22 @@ class LLMClient:
         }
 
         body = str.encode(json.dumps(request))
-        retry = self.retry
         response = {}
-        while retry:
-            response = requests.post(
-                LLMClient._ENDPOINT, data=body, headers=headers, timeout=(10, 120)
-            )
+        response = requests.post(
+            LLMClient._ENDPOINT, data=body, headers=headers, timeout=(10, 120)
+        )
 
-            if response.status_code == 200:
-                break
-            elif response.status_code == 429:
-                if retry:
-                    time.sleep(30)
-                    retry -= 1
-                    continue
-                else:
-                    raise Exception(
-                        f"Request failed after {self.retry} retries with {response.status_code}. Response: {response.text}"
-                    )
-            else:
-                raise Exception(
-                    f"Request failed with status code {response.status_code}. Response: {response.text}"
-                    )
-            
-        return response.json()
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 429:
+            raise Exception(
+                f"Request failed with {response.status_code}. Response: {response.text}"
+            )
+        else:
+            raise Exception(
+                f"Request failed with status code {response.status_code}. Response: {response.text}"
+                )
+        
 
     def send_batch_chat_request(self, model_name, batch_requests, batch_size=5):
         """
@@ -96,44 +87,32 @@ class LLMClient:
                 # Ensure each request has messages
                 if "messages" not in req:
                     raise ValueError("Each request in the batch must contain 'messages'")
-            
             # Create batch request
             # Each request in the batch needs to be processed separately in a loop
             batch_responses = []
             for request in current_batch:
-                retry = self.retry
-                while retry:
-                    try:
-                        body = str.encode(json.dumps(request))
-                        response = requests.post(
-                            LLMClient._ENDPOINT, 
-                            data=body, 
-                            headers=headers, 
-                            timeout=(10, 180)  # Longer timeout for batch requests
+                try:
+                    body = str.encode(json.dumps(request))
+                    response = requests.post(
+                        LLMClient._ENDPOINT, 
+                        data=body, 
+                        headers=headers, 
+                        timeout=(10, 180)  # Longer timeout for batch requests
+                    )
+                    
+                    if response.status_code == 200:
+                        batch_responses.append(response.json())
+                        break
+                    elif response.status_code == 429:
+                        raise Exception(
+                            f"Request failed with {response.status_code}. Response: {response.text}"
                         )
-                        
-                        if response.status_code == 200:
-                            batch_responses.append(response.json())
-                            break
-                        elif response.status_code == 429:
-                            if retry:
-                                time.sleep(30)
-                                retry -= 1
-                                continue
-                            else:
-                                raise Exception(
-                                    f"Request failed after {self.retry} retries with {response.status_code}. Response: {response.text}"
-                                )
-                        else:
-                            raise Exception(
-                                f"Request failed with status code {response.status_code}. Response: {response.text}"
-                            )
-                    except Exception as e:
-                        if retry:
-                            time.sleep(30)
-                            retry -= 1
-                        else:
-                            raise e
+                    else:
+                        raise Exception(
+                            f"Request failed with status code {response.status_code}. Response: {response.text}"
+                        )
+                except Exception as e:
+                    raise e
             
             # Add batch responses to results
             results.extend(batch_responses)

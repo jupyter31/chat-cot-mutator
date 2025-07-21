@@ -2,7 +2,7 @@ import copy
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, mutate_chat_samples_given_prompts, regenerate_responses
+from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, mutate_chat_samples_given_prompts, generate_responses
 
 st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
 
@@ -25,6 +25,7 @@ init_session_state({
     "chat_index": 0,
     "chat_samples": None,
     "differences": None,
+    "model": "dev-gpt-4o-gg",
     "mutated_chat_samples": None,
     "mutation_messages": None,
     "mutation_request": None,
@@ -43,6 +44,7 @@ st.header("Synthetic Chat-Data Mutation Framework")
 
 # get chat sample input from file upload or text area
 st.subheader("Chat samples")
+
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
 uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
@@ -64,9 +66,15 @@ if raw_chat_samples != ['']:
 # get mutation request
 st.subheader("Mutation request")
 
-options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
-mutation_request_selectbox = st.selectbox("Select mutation type", options, accept_new_options=False, index=None)
+mutation_options = ["Salience removal", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
+mutation_request_selectbox = st.selectbox("Select mutation type", mutation_options, accept_new_options=False, index=None)
 st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
+
+# get model to use
+st.subheader("Model")
+# TODO: add more models
+model_options = ["dev-gpt-4o-gg"]
+st.session_state.model = st.selectbox("Select model", model_options, accept_new_options=False, index=0)
 
 
 # enabled submit button if inputs are valid and a mutation request has been provided
@@ -80,9 +88,9 @@ st.divider()
 # call LLM API Client when submit button is clicked
 if submit:
     with st.spinner("Mutating chat samples..."):
-        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
+        st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
         st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-        st.session_state.original_responses, st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
+        st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
 
         st.session_state.submit_click = True
         st.session_state.retry_click = False
@@ -94,7 +102,7 @@ if st.session_state.submit_click:
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify and regenerate them.")
 
     # TODO : display this in a better way
-    with st.expander("Messages", expanded=False):
+    with st.expander("Edit messages", expanded=False):
         raw_modified_mutation_messages = st.text_area(
             "Messages",
             value="\n\n".join([json.dumps(msgs, indent=2) for msgs in st.session_state.mutation_messages]),
@@ -103,27 +111,24 @@ if st.session_state.submit_click:
             label_visibility="hidden"
         )
 
-        modified = (raw_modified_mutation_messages != "\n\n".join([json.dumps(msgs, indent=2) for msgs in st.session_state.mutation_messages]))
+        # validate the new messages
+        valid_mutation_messages = True
+        try:
+            modified_mutation_messages = [json.loads(msgs) for msgs in raw_modified_mutation_messages.strip().split("\n\n")]
+        except json.JSONDecodeError as e:
+            valid_mutation_messages = False
+            st.error(f"Invalid JSON format in mutation messages: {e}")
 
-        # validate the new mutation_messages
-        if modified:
-            valid_mutation_messages = True
-            try:
-                modified_mutation_messages = [json.loads(msgs) for msgs in raw_modified_mutation_messages.strip().split("\n\n")]
-            except json.JSONDecodeError as e:
-                valid_mutation_messages = False
-                st.error(f"Invalid JSON format in mutation messages: {e}")
-
-        disable_retry_button = (not valid_mutation_messages) or (not modified)
+        disable_retry_button = (not valid_mutation_messages)
         retry = st.button("Regenerate mutations with modified mutation messages", disabled=disable_retry_button)
 
     st.divider()
 
     if retry:        
         with st.spinner("Mutating chat samples..."):
-            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
+            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
             st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-            st.session_state.original_responses, st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
+            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
 
             st.session_state.retry_click = True
             st.session_state.submit_click = False
@@ -159,12 +164,15 @@ if st.session_state.submit_click or st.session_state.retry_click:
 
     # add download button for mutated chat sample, and display the mutated chat sample
     with tab1:
+        st.write("")
         st.download_button(
             label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
             data=json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
             file_name=f"{filename}_mutated_chat_sample_{st.session_state.chat_index + 1}.json",
             mime="application/json"
         )
+        st.write("")
+
         st.json(st.session_state.mutated_chat_samples[st.session_state.chat_index])
 
     # show differences between original and mutated chat sample

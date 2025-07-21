@@ -15,8 +15,6 @@ class LLMClient:
     def __init__(self, endpoint):
         self._app = PublicClientApplication(
             "07a99350-57ae-4197-9233-3a3dcb3ceaeb",
-            #"7a170a7f-3448-4fa6-9de1-57a235b71dbe",
-            #"68df66a4-cad9-4bfd-872b-c6ddde00d6b2",
             authority="https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47",
             enable_broker_on_windows=True,
             enable_broker_on_mac=True,

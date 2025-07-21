@@ -17,11 +17,12 @@ def get_differences(chat_samples, mutated_chat_samples):
     return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
-def mutate_chat_samples(chat_samples, mutation_request):
+def mutate_chat_samples(model, chat_samples, mutation_request):
     """
     Mutates the chat sample based on the mutation request.
 
     Args:
+        model (str): The model to use for the mutation.
         chat_samples (list<dict>): A list of JSON objects representing individual chat samples.
         mutation_request (str): The type of mutation to apply.
 
@@ -39,7 +40,7 @@ def mutate_chat_samples(chat_samples, mutation_request):
 
     affected_role = get_affected_role(mutation_request)
 
-    responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", mutation_messages)
+    responses = llm_client.send_batch_chat_request(model, mutation_messages)
 
     mutated_chat_samples = []
     for chat, response in zip(chat_samples, responses):
@@ -52,11 +53,12 @@ def mutate_chat_samples(chat_samples, mutation_request):
     return (mutated_chat_samples, mutation_messages)
 
 
-def mutate_chat_samples_given_prompts(chat_samples, modified_mutation_messages, mutation_request):
+def mutate_chat_samples_given_prompts(model, chat_samples, modified_mutation_messages, mutation_request):
     """
     Mutates the chat samples using the provided modified prompts.
 
     Args:
+        model (str): The model to use for the mutation.
         chat_samples (list<str>): A list of strings representing individual chat samples.
         modified_mutation_messages (list<dict>): A list of JSON objects representing the modified prompts.
         mutation_request (str): The type of mutation to apply.
@@ -66,7 +68,7 @@ def mutate_chat_samples_given_prompts(chat_samples, modified_mutation_messages, 
     """
     affected_role = get_affected_role(mutation_request)
 
-    responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", modified_mutation_messages)
+    responses = llm_client.send_batch_chat_request(model, modified_mutation_messages)
 
     mutated_chat_samples = []
     for chat, response in zip(chat_samples, responses):
@@ -78,11 +80,12 @@ def mutate_chat_samples_given_prompts(chat_samples, modified_mutation_messages, 
 
     return (mutated_chat_samples, modified_mutation_messages)
 
-def regenerate_responses(mutated_chat_samples):
+def generate_responses(model, mutated_chat_samples):
     """
     Regenerates the final assistant response using the mutated chat samples.
 
     Args:
+        model (str): The model to use to generate the new response.
         mutated_chat_samples (list<list<dict>>): A list of the mutated messages for each chat sample.
 
     Returns:
@@ -97,7 +100,7 @@ def regenerate_responses(mutated_chat_samples):
     mutated_messages = [{"messages": chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else chat["messages"] for chat in mutated_chat_samples]
 
     # remove original assistant reponse if it exists
-    responses = llm_client.send_batch_chat_request("dev-gpt-4o-gg", mutated_messages)
+    responses = llm_client.send_batch_chat_request(model, mutated_messages)
 
     new_responses = [response["choices"][0]["message"]["content"] for response in responses]
 

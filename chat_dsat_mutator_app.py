@@ -181,10 +181,8 @@ if st.session_state.submit_click or st.session_state.retry_click:
 
     # display original response and new response
     with tab3:
-        st.markdown("#### Original response")
-        st.write(st.session_state.original_responses[st.session_state.chat_index])
-
         st.markdown("#### New response")
         st.write(st.session_state.new_responses[st.session_state.chat_index])
 
-
+        st.markdown("#### Original response")
+        st.write(st.session_state.original_responses[st.session_state.chat_index])

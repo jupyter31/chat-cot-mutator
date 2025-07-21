@@ -4,7 +4,7 @@ import streamlit as st
 
 from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, mutate_chat_samples_given_prompts, regenerate_responses
 
-st.set_page_config(layout="wide", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
+st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
 
 COMPONENT_WIDTH = 700
 
@@ -14,16 +14,26 @@ def init_session_state(default_states):
         if state not in st.session_state:
             st.session_state[state] = default
 
+def prev_chat():
+    if st.session_state.chat_index > 0:
+        st.session_state.chat_index -= 1
+
+
+def next_chat():
+    if st.session_state.chat_index < len(st.session_state.mutated_chat_samples) - 1:
+        st.session_state.chat_index += 1
+
 init_session_state({
-    "submit_click": False,
-    "retry_click": False,
+    "chat_index": 0,
     "chat_samples": None,
-    "mutation_request": None,
+    "differences": None,
     "mutated_chat_samples": None,
     "mutation_messages": None,
-    "differences": None,
-    "original_responses": None,
+    "mutation_request": None,
     "new_responses": None,
+    "original_responses": None,
+    "retry_click": False,
+    "submit_click": False,
 })
 
 # set default input 
@@ -132,26 +142,34 @@ if st.session_state.submit_click or st.session_state.retry_click:
         mime="application/jsonl"
     )
 
-    st.divider()
 
-    for i, chat in enumerate(st.session_state.mutated_chat_samples):
-        st.markdown(f"#### Chat sample {i + 1}")
+    prev, curr, next = st.columns([1,2,1])
 
-        # collapsible preview of mutated chat sample
-        with st.expander("Preview mutation", expanded=False):
-            st.json(chat)
+    with prev:
+        st.button("⬅ Previous", on_click=prev_chat)
 
-        # show differences between mutation and original
-        with st.expander("Differences", expanded=False):
-            st.json(st.session_state.differences[i])
-    
-        # download button for the mutated chat sample
+    with curr:
+        st.subheader(f"Chat sample {st.session_state.chat_index + 1} of {len(st.session_state.mutated_chat_samples)}")
+
+    with next:
+        st.button("Next ➡", on_click=next_chat)
+
+    tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"], width="stretch")
+
+    with tab1:
         st.download_button(
-            label=f"Download mutation of chat sample {i+1} (.json)",
-            data=json.dumps(chat, indent=2),
-            file_name=f"{filename}_mutated_chat_sample_{i+1}.json",
+            label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
+            data=json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
+            file_name=f"{filename}_mutated_chat_sample_{st.session_state.chat_index + 1}.json",
             mime="application/json"
         )
+        st.json(st.session_state.mutated_chat_samples[st.session_state.chat_index])
 
-        st.divider()
+    with tab2:
+        st.json(st.session_state.differences[st.session_state.chat_index])
+
+    with tab3:
+        st.write(st.session_state.original_responses[st.session_state.chat_index])
+        st.write(st.session_state.new_responses[st.session_state.chat_index])
+
 

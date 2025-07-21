@@ -34,3 +34,11 @@ To run the Streamlit app, enter the following command:
 streamlit run .\chat_dsat_mutator_app.py
 ```
 The termimal should display a message indicating that you can now view the Streamlit app in your browser. Navigate to the `Local URL` listed below this message.
+
+## Use the Synthetic Chat-Data Mutation Framework
+1. Upload a JSONL file of chat samples, or copy and paste the chat samples into the text area.
+2. Select a predefined mutation type, or write your own mutation request.
+3. Choose which model you would like to perform the mutations and generate new responses from the mutated chat samples.
+4. Click **Submit**.
+
+![app-display](./assets/app-display.png)

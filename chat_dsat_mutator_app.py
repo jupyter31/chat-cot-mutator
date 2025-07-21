@@ -113,7 +113,7 @@ if st.session_state.submit_click:
         with st.spinner("Mutating chat samples..."):
             st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
             st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-            st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
+            st.session_state.original_responses, st.session_state.new_responses = regenerate_responses(st.session_state.mutated_chat_samples)
 
             st.session_state.retry_click = True
             st.session_state.submit_click = False

@@ -178,7 +178,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
     st.download_button(
         label="Download ALL mutated chat samples (.jsonl)",
         data="\n".join([json.dumps(chat) for chat in st.session_state.mutated_chat_samples]),
-        file_name=f"{filename}_mutated_samples.jsonl",
+        file_name="mutated_chat_samples.jsonl",
         mime="application/jsonl"
     )
 
@@ -205,7 +205,7 @@ if st.session_state.submit_click or st.session_state.retry_click:
         st.download_button(
             label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
             data=json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
-            file_name=f"{filename}_mutated_chat_sample_{st.session_state.chat_index + 1}.json",
+            file_name=f"mutated_chat_sample_{st.session_state.chat_index + 1}.json",
             mime="application/json"
         )
         st.write("")

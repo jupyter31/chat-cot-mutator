@@ -37,6 +37,7 @@ class LLMClient:
 
         body = str.encode(json.dumps(request))
         response = {}
+
         response = requests.post(
             LLMClient._ENDPOINT, data=body, headers=headers, timeout=(10, 120)
         )
@@ -51,8 +52,7 @@ class LLMClient:
             raise Exception(
                 f"Request failed with status code {response.status_code}. Response: {response.text}"
                 )
-        
-
+            
     def send_batch_chat_request(self, model_name, batch_requests, batch_size=5):
         """
         Sends multiple chat completion requests as a batch to the LLM endpoint.
@@ -87,6 +87,7 @@ class LLMClient:
                 # Ensure each request has messages
                 if "messages" not in req:
                     raise ValueError("Each request in the batch must contain 'messages'")
+            
             # Create batch request
             # Each request in the batch needs to be processed separately in a loop
             batch_responses = []
@@ -102,7 +103,6 @@ class LLMClient:
                     
                     if response.status_code == 200:
                         batch_responses.append(response.json())
-                        break
                     elif response.status_code == 429:
                         raise Exception(
                             f"Request failed with {response.status_code}. Response: {response.text}"

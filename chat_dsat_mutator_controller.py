@@ -1,3 +1,4 @@
+import copy
 from deepdiff import DeepDiff
 from llm_api_client import llm_client
 from mutation_data import get_affected_role, get_mutation_messages
@@ -31,7 +32,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request):
         list<dict>: A list of JSON objects representing the mutated chat samples.
     """
     mutation_messages = []
-    for sample in chat_samples:
+    for sample in copy.deepcopy(chat_samples):
         message_history = {
             "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
         }

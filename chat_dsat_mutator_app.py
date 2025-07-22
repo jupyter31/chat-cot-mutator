@@ -12,19 +12,11 @@ def init_session_state(default_states):
         if state not in st.session_state:
             st.session_state[state] = default
 
-def prev_chat():
-    if st.session_state.chat_index > 0:
-        st.session_state.chat_index -= 1
-
-
-def next_chat():
-    if st.session_state.chat_index < len(st.session_state.mutated_chat_samples) - 1:
-        st.session_state.chat_index += 1
-
 init_session_state({
     "chat_index": 0,
     "chat_samples": None,
     "differences": None,
+    "msgs_index": 0,
     "model": "dev-gpt-4o-gg",
     "mutated_chat_samples": None,
     "mutation_messages": None,
@@ -35,7 +27,25 @@ init_session_state({
     "submit_click": False,
 })
 
-# set default input 
+# define button functionality
+def click_prev_chat():
+    if st.session_state.chat_index > 0:
+        st.session_state.chat_index -= 1
+
+def click_next_chat():
+    if st.session_state.chat_index < len(st.session_state.mutated_chat_samples) - 1:
+        st.session_state.chat_index += 1
+
+def click_prev_msgs():
+    if st.session_state.msgs_index > 0:
+        st.session_state.msgs_index -= 1
+
+def click_next_msgs():
+    if st.session_state.msgs_index < len(st.session_state.mutation_messages) - 1:
+        st.session_state.msgs_index += 1
+
+
+# set default input validity
 valid_chat_samples = False
 valid_mutation_messages = False
 
@@ -103,17 +113,34 @@ if submit:
             st.error(e)
 
 
-# show the prompt used to mutate the chat samples and allow it to be modified and resubmitted
+# show the messages used to mutate the chat samples and allow it to be modified and resubmitted
 if st.session_state.submit_click:
     st.subheader("Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify and regenerate them.")
 
-    # TODO : display this in a better way
+    for i, msgs in enumerate(st.session_state.mutation_messages):
+        key = f"msgs_{i}"
+        if key not in st.session_state:
+            st.session_state[key] = json.dumps(msgs, indent=2)
+
     with st.expander("Edit messages", expanded=False):
-        raw_modified_mutation_messages = st.text_area(
+
+        # define buttons for navigating through the individual chat samples
+        prev_msgs, curr_msgs, next_msgs = st.columns([2.6,4,1])
+
+        with prev_msgs:
+            st.button("⬅ Previous", key="prev_msgs", on_click=click_prev_msgs)
+
+        with curr_msgs:
+            st.subheader(f"Chat sample {st.session_state.msgs_index + 1} of {len(st.session_state.mutation_messages)}")
+
+        with next_msgs:
+            st.button("Next ➡", key="next_msgs", on_click=click_next_msgs)
+
+        st.session_state[f"msgs_{st.session_state.msgs_index}"] = st.text_area(
             "Messages",
-            value="\n\n".join([json.dumps(msgs, indent=2) for msgs in st.session_state.mutation_messages]),
-            height=300,
+            value=st.session_state[f"msgs_{st.session_state.msgs_index}"],
+            height=400,
             disabled=False,
             label_visibility="hidden"
         )
@@ -121,7 +148,7 @@ if st.session_state.submit_click:
         # validate the new messages
         valid_mutation_messages = True
         try:
-            modified_mutation_messages = [json.loads(msgs) for msgs in raw_modified_mutation_messages.strip().split("\n\n")]
+            modified_mutation_messages = [json.loads(st.session_state[f"msgs_{i}"]) for i in range(len(st.session_state.mutation_messages))]
         except json.JSONDecodeError as e:
             valid_mutation_messages = False
             st.error(f"Invalid JSON format in mutation messages: {e}")
@@ -139,7 +166,7 @@ if st.session_state.submit_click:
                 st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
 
                 st.session_state.retry_click = True
-                st.session_state.submit_click = False
+                st.session_state.submit_click = True
             except Exception as e:
                 st.error(e)
 
@@ -158,16 +185,16 @@ if st.session_state.submit_click or st.session_state.retry_click:
     st.divider()
 
     # define buttons for navigating through the individual chat samples
-    prev, curr, next = st.columns([2.6,4,1])
+    prev_chat, curr_chat, next_chat = st.columns([2.6,4,1])
 
-    with prev:
-        st.button("⬅ Previous", on_click=prev_chat)
+    with prev_chat:
+        st.button("⬅ Previous", key="prev_chat", on_click=click_prev_chat)
 
-    with curr:
+    with curr_chat:
         st.subheader(f"Chat sample {st.session_state.chat_index + 1} of {len(st.session_state.mutated_chat_samples)}")
 
-    with next:
-        st.button("Next ➡", on_click=next_chat)
+    with next_chat:
+        st.button("Next ➡", key="next_chat", on_click=click_next_chat)
 
     # define tabs for displaying results of the mutation
     tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"])

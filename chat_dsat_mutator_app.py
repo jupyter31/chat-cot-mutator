@@ -104,7 +104,7 @@ if submit:
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
-            st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
+            st.session_state.differences = get_differences(copy.deepcopy(st.session_state.chat_samples), copy.deepcopy(st.session_state.mutated_chat_samples))
             st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
 
             st.session_state.submit_click = True

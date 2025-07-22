@@ -1,7 +1,31 @@
 import copy
 from deepdiff import DeepDiff
+import json
 from llm_api_client import llm_client
 from mutation_data import get_affected_role, get_mutation_messages
+
+def parse_obj(obj):
+    """
+    Parse any embedded JSON strings into JSON objects.
+
+    Args:
+        obj (dict or list): The object to parse.
+    
+    Returns:
+        dict or list: The parsed object with JSON strings converted to JSON objects.
+    """
+    if isinstance(obj, dict):
+        return {k:parse_obj(v) for k,v in obj.items()}
+    elif isinstance(obj, list):
+        return [parse_obj(x) for x in obj]
+    elif isinstance(obj,str):
+        try:
+            parsed = json.loads(obj)
+            return {k:parse_obj(v) for k,v in parsed.items()}
+        except:
+            return obj
+    
+    return obj
 
 
 def get_differences(chat_samples, mutated_chat_samples):
@@ -15,7 +39,8 @@ def get_differences(chat_samples, mutated_chat_samples):
     Returns:
         list<dict>: A list of JSON objects representing the differences between the original and mutated chat samples.
     """
-    return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
+
+    return [DeepDiff(parse_obj(chat_sample), parse_obj(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
 def mutate_chat_samples(model, chat_samples, mutation_request):

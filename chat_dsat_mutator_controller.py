@@ -119,11 +119,15 @@ def generate_responses(model, mutated_chat_samples):
         list<str>: A list of the new responses of each mutated chat sample.
     """
 
+    # get Enterprise Copilot persona instructions
+    with open("persona_instructions\\enterprise_copilot_system_prompt.json", "r", encoding="utf-8") as f:
+        persona_instructions = json.load(f)
+
     # get list of original assistant responses
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]
 
     # extract just messages, removing original assistant response if it exists
-    mutated_messages = [{"messages": chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else chat["messages"] for chat in mutated_chat_samples]
+    mutated_messages = [{"messages": persona_instructions + chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else chat["messages"] for chat in mutated_chat_samples]
 
     # remove original assistant reponse if it exists
     responses = llm_client.send_batch_chat_request(model, mutated_messages)

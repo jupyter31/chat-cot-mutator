@@ -127,7 +127,7 @@ def generate_responses(model, mutated_chat_samples):
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]
 
     # extract just messages, removing original assistant response if it exists
-    mutated_messages = [{"messages": persona_instructions + chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else chat["messages"] for chat in mutated_chat_samples]
+    mutated_messages = [{"messages": persona_instructions + chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else {"messages": chat["messages"]} for chat in mutated_chat_samples]
 
     # remove original assistant reponse if it exists
     responses = llm_client.send_batch_chat_request(model, mutated_messages)

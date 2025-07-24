@@ -23,7 +23,6 @@ init_session_state({
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
-    "retry_click": False,
     "submit_click": False,
 })
 
@@ -46,8 +45,8 @@ def click_next_msgs():
 
 
 # set default input validity
-valid_chat_samples = False
-valid_mutation_messages = False
+valid_chat_samples = True
+valid_mutation_messages = True
 
 
 st.header("Synthetic Chat-Data Mutation Framework")
@@ -58,14 +57,10 @@ st.subheader("Chat samples")
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
 uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
-filename = uploaded_file.name.strip() if (uploaded_file is not None) else ""
-
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
 
 # validate chat samples
 if raw_chat_samples != ['']:
-    valid_chat_samples = True
-
     try:
         st.session_state.chat_samples = [json.loads(chat) for chat in raw_chat_samples]
     except json.JSONDecodeError as e:
@@ -98,17 +93,12 @@ st.divider()
 
 # call LLM API Client when submit button is clicked
 if submit:
-    st.session_state.submit_click = False
-    st.session_state.retry_click = False
-
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
             st.session_state.differences = get_differences(copy.deepcopy(st.session_state.chat_samples), copy.deepcopy(st.session_state.mutated_chat_samples))
             st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
-
             st.session_state.submit_click = True
-            st.session_state.retry_click = False
         except Exception as e:
             st.error(e)
 
@@ -146,7 +136,6 @@ if st.session_state.submit_click:
         )
 
         # validate the new messages
-        valid_mutation_messages = True
         try:
             modified_mutation_messages = [json.loads(st.session_state[f"msgs_{i}"]) for i in range(len(st.session_state.mutation_messages))]
         except json.JSONDecodeError as e:
@@ -164,13 +153,8 @@ if st.session_state.submit_click:
                 st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
                 st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
                 st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
-
-                st.session_state.retry_click = True
-                st.session_state.submit_click = True
             except Exception as e:
                 st.error(e)
-
-if st.session_state.submit_click or st.session_state.retry_click:
 
     st.subheader("Mutated chat samples")
 

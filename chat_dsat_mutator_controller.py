@@ -4,7 +4,7 @@ import json
 from llm_api_client import llm_client
 from mutation_data import get_affected_role, get_mutation_messages
 
-def parse_obj(obj):
+def parse_embedded_json(obj):
     """
     Parse any embedded JSON strings into JSON objects.
 
@@ -15,15 +15,34 @@ def parse_obj(obj):
         dict or list: The parsed object with JSON strings converted to JSON objects.
     """
     if isinstance(obj, dict):
-        return {k:parse_obj(v) for k,v in obj.items()}
+        return {k:parse_embedded_json(v) for k,v in obj.items()}
     elif isinstance(obj, list):
-        return [parse_obj(x) for x in obj]
+        return [parse_embedded_json(x) for x in obj]
     elif isinstance(obj,str):
         try:
             parsed = json.loads(obj)
-            return {k:parse_obj(v) for k,v in parsed.items()}
+            return {k:parse_embedded_json(v) for k,v in parsed.items()}
         except:
             return obj
+    
+    return obj
+
+def stringify_json_objects(obj):
+    """
+    Convert any embedded JSON objects to strings.
+
+    Args:
+        obj (dict or list): The object to stringify.
+    
+    Returns:
+        dict or list: The object with JSON objects converted to strings.
+    """
+    if isinstance(obj, dict):
+        return {k: json.dumps(v) if isinstance(v,dict) else stringify_json_objects(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [stringify_json_objects(x) for x in obj]
+    elif isinstance(obj, str):
+        return obj
     
     return obj
 
@@ -40,7 +59,7 @@ def get_differences(chat_samples, mutated_chat_samples):
         list<dict>: A list of JSON objects representing the differences between the original and mutated chat samples.
     """
 
-    return [DeepDiff(parse_obj(chat_sample), parse_obj(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
+    return [DeepDiff(parse_embedded_json(chat_sample), parse_embedded_json(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
 def mutate_chat_samples(model, chat_samples, mutation_request):
@@ -126,8 +145,22 @@ def generate_responses(model, mutated_chat_samples):
     # get list of original assistant responses
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]
 
-    # extract just messages, removing original assistant response if it exists
-    mutated_messages = [{"messages": persona_instructions + chat["messages"][:-1] + [{"role":"user", "content":"Answer the user prompt from our message history."}]} if chat["messages"][-1]["role"] == "assistant" else {"messages": chat["messages"]} for chat in mutated_chat_samples]
+    mutated_messages = []
+    for chat in mutated_chat_samples:
+        persona_instructions_copy = copy.deepcopy(persona_instructions)
+
+        # extract just messages, removing original assistant response if it exists
+        persona_instructions_copy["messages"] = persona_instructions_copy["messages"] + (chat["messages"][:-1] if chat["messages"][-1]["role"] == "assistant" else chat["messages"]) + [{"role":"user", "content":"Answer the user prompt from our message history."}]
+
+        if chat.get("tools") is not None:
+            persona_instructions_copy["tools"] = chat["tools"]
+
+        # TODO: try to pass metadata to the LLM API
+        # if chat.get("metadata") is not None:
+        #     persona_instructions_copy["metadata"] = stringify_json_objects(chat["metadata"])
+
+        # add the system prompt to the mutated messages
+        mutated_messages.append(persona_instructions_copy)
 
     # remove original assistant reponse if it exists
     responses = llm_client.send_batch_chat_request(model, mutated_messages)

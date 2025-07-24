@@ -68,7 +68,7 @@ class LLMClient:
         """
         # Get the token
         token = self._get_token()
-        
+
         # Populate the headers
         headers = {
             "Content-Type": "application/json",
@@ -87,7 +87,7 @@ class LLMClient:
                 # Ensure each request has messages
                 if "messages" not in req:
                     raise ValueError("Each request in the batch must contain 'messages'")
-            
+                
             # Create batch request
             # Each request in the batch needs to be processed separately in a loop
             batch_responses = []
@@ -116,7 +116,7 @@ class LLMClient:
             
             # Add batch responses to results
             results.extend(batch_responses)
-            
+
             # Sleep briefly between batches to avoid rate limiting
             if i + batch_size < len(batch_requests):
                 time.sleep(1)

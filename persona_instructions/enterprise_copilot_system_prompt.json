@@ -221,6 +221,5 @@
         "<|im_end|>",
         "<|im_start|>",
         "<|fim_suffix|>"
-    ],
-    "logprobs": false
+    ]
 }

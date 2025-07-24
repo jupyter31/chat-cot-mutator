@@ -24,6 +24,7 @@ init_session_state({
     "new_responses": None,
     "original_responses": None,
     "submit_click": False,
+    "system_prompt_params": {}
 })
 
 # define button functionality
@@ -53,7 +54,6 @@ st.header("Synthetic Chat-Data Mutation Framework")
 
 # get chat sample input from file upload or text area
 st.subheader("Chat samples")
-
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
 uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
@@ -106,7 +106,7 @@ if submit:
 # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
 if st.session_state.submit_click:
     st.subheader("Mutation messages")
-    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify and regenerate them.")
+    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
 
     for i, msgs in enumerate(st.session_state.mutation_messages):
         key = f"msgs_{i}"
@@ -132,7 +132,7 @@ if st.session_state.submit_click:
             value=st.session_state[f"msgs_{st.session_state.msgs_index}"],
             height=400,
             disabled=False,
-            label_visibility="hidden"
+            label_visibility="collapsed"
         )
 
         # validate the new messages
@@ -165,6 +165,41 @@ if st.session_state.submit_click:
         file_name="mutated_chat_samples.jsonl",
         mime="application/jsonl"
     )
+
+    st.divider()
+
+    st.subheader("System prompt")
+    st.write("The parameters below were used in the system prompt to generate the new responses. You can use it to understand how the responses were generated, or modify the parameters and regenerate the responses.")
+
+    # TODO: move this somewhere else
+    with open("persona_instructions\\enterprise_copilot_system_prompt.json", "r", encoding="utf-8") as f:
+        persona_instructions = json.load(f)
+
+    # TODO: change value to be taken from system prompt
+    # TODO: simplify using list of dicts to generalise
+    with st.expander("Edit system prompt", expanded=False):
+        st.markdown("Number of Responses")
+        st.session_state.system_prompt_params["n"] = st.slider("Number of Responses", min_value=1, max_value=10, value=1, step=1, label_visibility="collapsed")
+        st.markdown("Temperature")
+        st.session_state.system_prompt_params["temperature"] = st.slider("Temperature", min_value=0.0, max_value=2.0, value=0.3, step=0.1, label_visibility="collapsed")
+        st.markdown("Max Tokens")
+        st.session_state.system_prompt_params["max_tokens"] = st.slider("Max Tokens", min_value=1, max_value=131072, value=4096, step=1, label_visibility="collapsed")
+        st.markdown("Top P")
+        st.session_state.system_prompt_params["top_p"] = st.slider("Top P", min_value=0.0, max_value=1.0, value=0.95, step=0.1, label_visibility="collapsed")
+        st.markdown("Frequency Penalty")
+        st.session_state.system_prompt_params["frequency_penalty"] = st.slider("Frequency Penalty", min_value=-2.0, max_value=2.0, value=0.0, step=0.1, label_visibility="collapsed")
+        st.markdown("Presence Penalty")
+        st.session_state.system_prompt_params["presence_penalty"] = st.slider("Presence Penalty", min_value=-2.0, max_value=2.0, value=0.0, step=0.1, label_visibility="collapsed")
+        st.markdown("Stop Sequences")
+        st.session_state.system_prompt_params["stop"] = st.text_area("Stop Sequences", value="<|im_end|>\n<|im_start|>\n<|fim_suffix|>", placeholder="e.g. '<|im_end|>'", label_visibility="collapsed").strip().split("\n")
+        st.markdown("Messages")
+        st.session_state.system_prompt_params["messages"] = st.text_area(
+            "Messages",
+            value=json.dumps(persona_instructions["messages"], indent=2),
+            height=400,
+            disabled=False,
+            label_visibility="collapsed"
+        )
 
     st.divider()
 

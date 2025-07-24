@@ -145,6 +145,7 @@ def generate_responses(model, mutated_chat_samples):
     # get list of original assistant responses
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]
 
+    # add the system prompt to the mutated messages
     mutated_messages = []
     for chat in mutated_chat_samples:
         persona_instructions_copy = copy.deepcopy(persona_instructions)
@@ -155,11 +156,6 @@ def generate_responses(model, mutated_chat_samples):
         if chat.get("tools") is not None:
             persona_instructions_copy["tools"] = chat["tools"]
 
-        # TODO: try to pass metadata to the LLM API
-        # if chat.get("metadata") is not None:
-        #     persona_instructions_copy["metadata"] = stringify_json_objects(chat["metadata"])
-
-        # add the system prompt to the mutated messages
         mutated_messages.append(persona_instructions_copy)
 
     # remove original assistant reponse if it exists

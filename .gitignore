@@ -4,8 +4,8 @@ __pycache__/*
 .venv
 .venv/*
 
-components_testing
-components_testing/*
+feature_testing
+feature_testing/*
 
 outputs
 outputs/*

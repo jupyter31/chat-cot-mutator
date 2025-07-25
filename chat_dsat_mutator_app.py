@@ -227,7 +227,7 @@ if st.session_state.submit_click:
             except Exception as e:
                 st.error(e)
 
-
+    # TODO: make the data be the mutated chat samples + new responses
     # add download button for all mutated chat samples
     st.subheader("Mutated chat samples")
     st.download_button(
@@ -260,6 +260,7 @@ if st.session_state.submit_click:
     # add download button for mutated chat sample, and display the mutated chat sample
     with tab1:
         st.write("")
+        # TODO: make the data be the mutated chat sample + new response
         st.download_button(
             label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
             data=json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),

@@ -2,7 +2,12 @@ import copy
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, mutate_chat_samples_given_prompts, generate_responses
+from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, generate_responses
+
+from components.system_prompt import edit_system_prompt, init_system_prompt
+from components.mutation_messages import edit_mutation_messages
+from components.results import display_individual_chat_sample_results, download_all
+
 
 st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
 
@@ -11,37 +16,6 @@ def init_session_state(default_states):
     for state, default in default_states.items():
         if state not in st.session_state:
             st.session_state[state] = default
-
-
-def init_system_prompt():
-    """
-    Reads the parameters from the default system prompt to populate values in system_prompt.
-    """
-    if not st.session_state.system_prompt:
-        with open("system_prompts\\enterprise_copilot.json", "r", encoding="utf-8") as f:
-            st.session_state.system_prompt = json.load(f)
-
-    if not st.session_state.slider_params:
-        st.session_state.slider_params = {
-            #"n": {"label": "Number of Responses", "min": 1, "max": 10, "step": 1},
-            "temperature": {"label": "Temperature", "min": 0.0, "max": 2.0, "step": 0.1},
-            "max_tokens": {"label": "Max Tokens", "min": 1, "max": 131072, "step": 1},
-            "top_p": {"label": "Top P", "min": 0.0, "max": 1.0, "step": 0.1},
-            "frequency_penalty": {"label": "Frequency Penalty", "min": -2.0, "max": 2.0, "step": 0.1},
-            "presence_penalty": {"label": "Presence Penalty", "min": -2.0, "max": 2.0, "step": 0.1}
-        }
-
-
-# define button functionality
-def click_prev(index):
-    if st.session_state[index] > 0:
-        st.session_state[index] -= 1
-
-
-def click_next(index, max_index):
-    if st.session_state[index] < max_index:
-        st.session_state[index] += 1
-
 
 init_session_state({
     "chat_index": 0,
@@ -61,12 +35,6 @@ init_session_state({
 
 init_system_prompt()
 
-# set default input validity
-valid_chat_samples = True
-valid_mutation_messages = True
-valid_system_prompt = True
-
-
 st.header("Synthetic Chat-Data Mutation Framework")
 
 # get chat sample input from file upload or text area
@@ -77,13 +45,13 @@ uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["j
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
 
 # validate chat samples
+valid_chat_samples = True
 if raw_chat_samples != ['']:
     try:
         st.session_state.chat_samples = [json.loads(chat) for chat in raw_chat_samples]
     except json.JSONDecodeError as e:
         valid_chat_samples = False
         st.error(f"Invalid JSON format: {e}")
-
 
 # get mutation request
 st.subheader("Mutation request")
@@ -103,9 +71,7 @@ st.session_state.model = st.text_input(
 disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (st.session_state.model.strip() == "")
 submit = st.button("Submit", disabled=disable_submit_button)
 
-
 st.divider()
-
 
 # call LLM API Client when submit button is clicked
 if submit:
@@ -118,167 +84,29 @@ if submit:
         except Exception as e:
             st.error(e)
 
-
-# show the messages used to mutate the chat samples and allow it to be modified and resubmitted
-# TODO: only allow the change of the additional mutation messages, not original chat samples
 if st.session_state.submit_click:
+    # TODO: only allow the change of the additional mutation messages, not original chat samples
+    # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
     st.subheader("Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
 
-    for i, msgs in enumerate(st.session_state.mutation_messages):
-        key = f"msgs_{i}"
-        if key not in st.session_state:
-            st.session_state[key] = json.dumps(msgs, indent=2)
-
-    with st.expander("Edit messages", expanded=False):
-
-        # define buttons for navigating through the individual chat samples
-        prev_msgs, curr_msgs, next_msgs = st.columns([2.6,4,1])
-
-        with prev_msgs:
-            st.button("⬅ Previous", key="prev_msgs", on_click=click_prev, args=("msgs_index",))
-
-        with curr_msgs:
-            st.subheader(f"Chat sample {st.session_state.msgs_index + 1} of {len(st.session_state.mutation_messages)}")
-
-        with next_msgs:
-            st.button("Next ➡", key="next_msgs", on_click=click_next, args=("msgs_index", len(st.session_state.mutation_messages) - 1))
-
-        st.session_state[f"msgs_{st.session_state.msgs_index}"] = st.text_area(
-            "Messages",
-            value=st.session_state[f"msgs_{st.session_state.msgs_index}"],
-            height=400,
-            disabled=False,
-            label_visibility="collapsed"
-        )
-
-        # validate the new messages
-        try:
-            modified_mutation_messages = [json.loads(st.session_state[f"msgs_{i}"]) for i in range(len(st.session_state.mutation_messages))]
-        except json.JSONDecodeError as e:
-            valid_mutation_messages = False
-            st.error(f"Invalid JSON format in mutation messages: {e}")
-
-        disable_retry_button = (not valid_mutation_messages)
-        retry = st.button("Regenerate mutations with modified mutation messages", disabled=disable_retry_button)
-
-    st.divider()
-
-    if retry:        
-        with st.spinner("Mutating chat samples..."):
-            try:
-                st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
-                st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
-            except Exception as e:
-                st.error(e)
-
+    edit_mutation_messages()
 
     # expose the system prompt used for generating the new responses
     st.subheader("System prompt")
     st.write("The parameters below were used in the system prompt to generate the new responses. You can use it to understand how the responses were generated, or modify the parameters and regenerate the responses.")
-
-    with st.expander("Edit system prompt", expanded=False):
-        for k, v in st.session_state.slider_params.items():
-            st.markdown(f"**{v["label"]}**")
-            st.session_state.system_prompt[k] = st.slider(
-                v["label"],
-                min_value=v["min"],
-                max_value=v["max"],
-                value=st.session_state.system_prompt[k],
-                step=v["step"],
-                key=k,
-                label_visibility="collapsed"
-            )
-
-        st.markdown("**Stop Sequences**")
-        st.session_state.system_prompt["stop"] = st.text_area(
-            "Stop Sequences",
-            value=("\n").join(st.session_state.system_prompt["stop"]),
-            placeholder="e.g. '<|im_end|>'",
-            label_visibility="collapsed"
-        ).strip().split("\n")
-        
-        st.markdown("**Messages**")
-        modified_system_prompt_messages = st.text_area(
-            "Messages",
-            value=json.dumps(st.session_state.system_prompt["messages"], indent=2),
-            height=400,
-            disabled=False,
-            label_visibility="collapsed"
-        )
-
-        try:
-            st.session_state.system_prompt["messages"] = json.loads(modified_system_prompt_messages.strip())
-        except json.JSONDecodeError as e:
-            valid_system_prompt = False
-            st.error(f"Invalid JSON format in system prompt messages: {e}")
-
-        disable_system_prompt_button = (not valid_system_prompt)
-        regen = st.button("Regenerate responses with modified system prompt", disabled=disable_system_prompt_button)
-
-
-    st.divider()
-
-    if regen:
-        with st.spinner("Regenerating responses..."):
-            try:
-                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
-            except Exception as e:
-                st.error(e)
+    
+    edit_system_prompt()
 
     # TODO: make the data be the mutated chat samples + new responses
     # add download button for all mutated chat samples
     st.subheader("Mutated chat samples")
-    st.download_button(
-        label="Download ALL mutated chat samples (.jsonl)",
-        data="\n".join([json.dumps(chat) for chat in st.session_state.mutated_chat_samples]),
-        file_name="mutated_chat_samples.jsonl",
-        mime="application/jsonl"
-    )
+    
+    download_all()
 
-
-    st.divider()
-
-
+    st.subheader("Individual chat sample results")
     # TODO: make display load lighter
     # define buttons for navigating through the individual chat samples
-    prev_chat, curr_chat, next_chat = st.columns([2.6,4,1])
 
-    with prev_chat:
-        st.button("⬅ Previous", key="prev_chat", on_click=click_prev, args=("chat_index",))
-
-    with curr_chat:
-        st.subheader(f"Chat sample {st.session_state.chat_index + 1} of {len(st.session_state.mutated_chat_samples)}")
-
-    with next_chat:
-        st.button("Next ➡", key="next_chat", on_click=click_next, args=("chat_index", len(st.session_state.mutated_chat_samples) - 1))
-
-    # define tabs for displaying results of the mutation
-    tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"])
-
-    # add download button for mutated chat sample, and display the mutated chat sample
-    with tab1:
-        st.write("")
-        # TODO: make the data be the mutated chat sample + new response
-        st.download_button(
-            label=f"Download mutation of chat sample {st.session_state.chat_index + 1} (.json)",
-            data=json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
-            file_name=f"mutated_chat_sample_{st.session_state.chat_index + 1}.json",
-            mime="application/json"
-        )
-        st.write("")
-
-        st.json(st.session_state.mutated_chat_samples[st.session_state.chat_index])
-
-    # show differences between original and mutated chat sample
-    with tab2:
-        st.json(st.session_state.differences[st.session_state.chat_index])
-
-    # display original response and new response
-    with tab3:
-        st.markdown("#### New response")
-        st.write(st.session_state.new_responses[st.session_state.chat_index])
-
-        st.markdown("#### Original response")
-        st.write(st.session_state.original_responses[st.session_state.chat_index])
+    display_individual_chat_sample_results()
+    

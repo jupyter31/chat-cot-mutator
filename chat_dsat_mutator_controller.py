@@ -125,22 +125,19 @@ def mutate_chat_samples_given_prompts(model, chat_samples, modified_mutation_mes
 
     return (mutated_chat_samples, modified_mutation_messages)
 
-def generate_responses(model, mutated_chat_samples):
+def generate_responses(model, system_prompt, mutated_chat_samples):
     """
     Regenerates the final assistant response using the mutated chat samples.
 
     Args:
         model (str): The model to use to generate the new response.
+        system_prompt (dict): The system prompt to use for the LLM.
         mutated_chat_samples (list<list<dict>>): A list of the mutated messages for each chat sample.
 
     Returns:
         list<str>: A list of the original assistant responses for each chat sample.
         list<str>: A list of the new responses of each mutated chat sample.
     """
-
-    # get Enterprise Copilot persona instructions
-    with open("system_prompts\\enterprise_copilot.json", "r", encoding="utf-8") as f:
-        system_prompt = json.load(f)
 
     # get list of original assistant responses
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]

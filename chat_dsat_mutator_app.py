@@ -13,17 +13,23 @@ def init_session_state(default_states):
             st.session_state[state] = default
 
 
-def init_system_prompt_params():
+def init_system_prompt():
     """
-    Reads the parameters from the default system prompt to populate values in system_prompt_params.
+    Reads the parameters from the default system prompt to populate values in system_prompt.
     """
-    with open("system_prompts\\enterprise_copilot.json", "r", encoding="utf-8") as f:
-        system_prompt = json.load(f)
+    if not st.session_state.system_prompt:
+        with open("system_prompts\\enterprise_copilot.json", "r", encoding="utf-8") as f:
+            st.session_state.system_prompt = json.load(f)
 
-        for k, v in system_prompt.items():
-            if k not in st.session_state.system_prompt_params:
-                print("k:", k, "v:", v)
-                st.session_state.system_prompt_params[k] = v
+    if not st.session_state.slider_params:
+        st.session_state.slider_params = {
+            #"n": {"label": "Number of Responses", "min": 1, "max": 10, "step": 1},
+            "temperature": {"label": "Temperature", "min": 0.0, "max": 2.0, "step": 0.1},
+            "max_tokens": {"label": "Max Tokens", "min": 1, "max": 131072, "step": 1},
+            "top_p": {"label": "Top P", "min": 0.0, "max": 1.0, "step": 0.1},
+            "frequency_penalty": {"label": "Frequency Penalty", "min": -2.0, "max": 2.0, "step": 0.1},
+            "presence_penalty": {"label": "Presence Penalty", "min": -2.0, "max": 2.0, "step": 0.1}
+        }
 
 
 # define button functionality
@@ -48,15 +54,17 @@ init_session_state({
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
+    "slider_params": {},
     "submit_click": False,
-    "system_prompt_params": {}
+    "system_prompt": {}
 })
 
-init_system_prompt_params()
+init_system_prompt()
 
 # set default input validity
 valid_chat_samples = True
 valid_mutation_messages = True
+valid_system_prompt = True
 
 
 st.header("Synthetic Chat-Data Mutation Framework")
@@ -105,7 +113,7 @@ if submit:
         try:
             st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
             st.session_state.differences = get_differences(copy.deepcopy(st.session_state.chat_samples), copy.deepcopy(st.session_state.mutated_chat_samples))
-            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
+            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
             st.session_state.submit_click = True
         except Exception as e:
             st.error(e)
@@ -161,59 +169,63 @@ if st.session_state.submit_click:
             try:
                 st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples_given_prompts(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), modified_mutation_messages, st.session_state.mutation_request)
                 st.session_state.differences = get_differences(st.session_state.chat_samples, st.session_state.mutated_chat_samples)
-                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.mutated_chat_samples)
+                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
             except Exception as e:
                 st.error(e)
 
 
-    # TODO: allow resubmission with modified system prompt parameters
     # expose the system prompt used for generating the new responses
     st.subheader("System prompt")
     st.write("The parameters below were used in the system prompt to generate the new responses. You can use it to understand how the responses were generated, or modify the parameters and regenerate the responses.")
 
-    # TODO: put these in session state / import from somewhere else
-    slider_params = {
-        "n": {"label": "Number of Responses", "min": 1, "max": 10, "step": 1},
-        "temperature": {"label": "Temperature", "min": 0.0, "max": 2.0, "step": 0.1},
-        "max_tokens": {"label": "Max Tokens", "min": 1, "max": 131072, "step": 1},
-        "top_p": {"label": "Top P", "min": 0.0, "max": 1.0, "step": 0.1},
-        "frequency_penalty": {"label": "Frequency Penalty", "min": -2.0, "max": 2.0, "step": 0.1},
-        "presence_penalty": {"label": "Presence Penalty", "min": -2.0, "max": 2.0, "step": 0.1}
-    }
-
     with st.expander("Edit system prompt", expanded=False):
-        for k, v in slider_params.items():
+        for k, v in st.session_state.slider_params.items():
             st.markdown(f"**{v["label"]}**")
-            st.session_state.system_prompt_params[k] = st.slider(
+            st.session_state.system_prompt[k] = st.slider(
                 v["label"],
                 min_value=v["min"],
                 max_value=v["max"],
-                value=st.session_state.system_prompt_params[k],
+                value=st.session_state.system_prompt[k],
                 step=v["step"],
                 key=k,
                 label_visibility="collapsed"
             )
 
         st.markdown("**Stop Sequences**")
-        st.session_state.system_prompt_params["stop"] = st.text_area(
+        st.session_state.system_prompt["stop"] = st.text_area(
             "Stop Sequences",
-            value=("\n").join(st.session_state.system_prompt_params["stop"]),
+            value=("\n").join(st.session_state.system_prompt["stop"]),
             placeholder="e.g. '<|im_end|>'",
             label_visibility="collapsed"
         ).strip().split("\n")
         
-        # TODO: validate JSON
         st.markdown("**Messages**")
-        st.session_state.system_prompt_params["messages"] = st.text_area(
+        modified_system_prompt_messages = st.text_area(
             "Messages",
-            value=json.dumps(st.session_state.system_prompt_params["messages"], indent=2),
+            value=json.dumps(st.session_state.system_prompt["messages"], indent=2),
             height=400,
             disabled=False,
             label_visibility="collapsed"
         )
 
+        try:
+            st.session_state.system_prompt["messages"] = json.loads(modified_system_prompt_messages.strip())
+        except json.JSONDecodeError as e:
+            valid_system_prompt = False
+            st.error(f"Invalid JSON format in system prompt messages: {e}")
+
+        disable_system_prompt_button = (not valid_system_prompt)
+        regen = st.button("Regenerate responses with modified system prompt", disabled=disable_system_prompt_button)
+
 
     st.divider()
+
+    if regen:
+        with st.spinner("Regenerating responses..."):
+            try:
+                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
+            except Exception as e:
+                st.error(e)
 
 
     # add download button for all mutated chat samples

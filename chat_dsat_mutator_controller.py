@@ -139,8 +139,8 @@ def generate_responses(model, mutated_chat_samples):
     """
 
     # get Enterprise Copilot persona instructions
-    with open("persona_instructions\\enterprise_copilot_system_prompt.json", "r", encoding="utf-8") as f:
-        persona_instructions = json.load(f)
+    with open("system_prompts\\enterprise_copilot.json", "r", encoding="utf-8") as f:
+        system_prompt = json.load(f)
 
     # get list of original assistant responses
     original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in mutated_chat_samples]
@@ -148,15 +148,15 @@ def generate_responses(model, mutated_chat_samples):
     # add the system prompt to the mutated messages
     mutated_messages = []
     for chat in mutated_chat_samples:
-        persona_instructions_copy = copy.deepcopy(persona_instructions)
+        system_prompt_copy = copy.deepcopy(system_prompt)
 
         # extract just messages, removing original assistant response if it exists
-        persona_instructions_copy["messages"] = persona_instructions_copy["messages"] + (chat["messages"][:-1] if chat["messages"][-1]["role"] == "assistant" else chat["messages"]) + [{"role":"user", "content":"Answer the user prompt from our message history."}]
+        system_prompt_copy["messages"] = system_prompt_copy["messages"] + (chat["messages"][:-1] if chat["messages"][-1]["role"] == "assistant" else chat["messages"]) + [{"role":"user", "content":"Answer the user prompt from our message history."}]
 
         if chat.get("tools") is not None:
-            persona_instructions_copy["tools"] = chat["tools"]
+            system_prompt_copy["tools"] = chat["tools"]
 
-        mutated_messages.append(persona_instructions_copy)
+        mutated_messages.append(system_prompt_copy)
 
     # remove original assistant reponse if it exists
     responses = llm_client.send_batch_chat_request(model, mutated_messages)

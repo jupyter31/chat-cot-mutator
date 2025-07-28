@@ -41,4 +41,4 @@ The termimal should display a message indicating that you can now view the Strea
 3. Choose which model you would like to perform the mutations and generate new responses from the mutated chat samples.
 4. Click **Submit**.
 
-![app-display](./assets/app-display.png)
+![app-display](./images/app-display.png)

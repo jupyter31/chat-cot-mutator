@@ -88,12 +88,32 @@ def mutate_chat_samples(model, chat_samples, mutation_request):
     responses = llm_client.send_batch_chat_request(model, mutation_messages)
 
     mutated_chat_samples = []
-    for chat, response in zip(chat_samples, responses):
-        for msg in chat["messages"]:
-            if msg["role"] == affected_role:
-                msg["content"] = response["choices"][0]["message"]["content"]
-                break
-        mutated_chat_samples.append(chat)
+
+    if affected_role == "user":
+        for chat, response in zip(chat_samples, responses):
+            for msg in chat["messages"]:
+                if msg["role"] == affected_role:
+                    msg["content"] = response["choices"][0]["message"]["content"]
+
+            mutated_chat_samples.append(chat)
+
+    elif affected_role == "tool":
+        for chat, response in zip(chat_samples, responses):
+
+            sub_responses = json.loads(response["choices"][0]["message"]["content"])
+
+            for msg in chat["messages"]:
+                if msg["role"] == affected_role and json.loads(msg["content"]).get("results") is not None:
+                    msg["content"] = json.loads(msg["content"])
+
+                    for i, result in enumerate(msg["content"]["results"]):
+                        reference_number = str(result["referenceNumber"])
+                        if reference_number in sub_responses.keys():
+                           msg["content"]["results"][i] = sub_responses[reference_number]
+
+                    msg["content"] = json.dumps(msg["content"])
+
+            mutated_chat_samples.append(chat)
 
     return (mutated_chat_samples, mutation_messages)
 

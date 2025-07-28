@@ -1,7 +1,7 @@
 import copy
 from deepdiff import DeepDiff
 import json
-from llm_api_client import llm_client
+from components.llm_api_client import llm_client
 from mutation_data import get_affected_role, get_mutation_messages
 
 def parse_embedded_json(obj):

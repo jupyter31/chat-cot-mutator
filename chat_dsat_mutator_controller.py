@@ -62,7 +62,7 @@ def get_differences(chat_samples, mutated_chat_samples):
     return [DeepDiff(parse_embedded_json(chat_sample), parse_embedded_json(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
-def mutate_chat_samples(model, chat_samples, mutation_request):
+def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages=None):
     """
     Mutates the chat sample based on the mutation request.
 
@@ -70,18 +70,21 @@ def mutate_chat_samples(model, chat_samples, mutation_request):
         model (str): The model to use for the mutation.
         chat_samples (list<dict>): A list of JSON objects representing individual chat samples.
         mutation_request (str): The type of mutation to apply.
+        mutation_messages (list<dict>, optional): A list of JSON objects representing the modified prompts.
 
     Returns:
         list<dict>: A list of JSON objects representing the prompts used to perform the mutations.
         list<dict>: A list of JSON objects representing the mutated chat samples.
     """
-    mutation_messages = []
-    for sample in copy.deepcopy(chat_samples):
-        message_history = {
-            "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
-        }
 
-        mutation_messages.append(message_history)
+    if mutation_messages is None:
+        mutation_messages = []
+        for sample in copy.deepcopy(chat_samples):
+            message_history = {
+                "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
+            }
+
+            mutation_messages.append(message_history)
 
     affected_role = get_affected_role(mutation_request)
 
@@ -117,34 +120,6 @@ def mutate_chat_samples(model, chat_samples, mutation_request):
 
     return (mutated_chat_samples, mutation_messages)
 
-
-def mutate_chat_samples_given_prompts(model, chat_samples, modified_mutation_messages, mutation_request):
-    """
-    Mutates the chat samples using the provided modified prompts.
-
-    Args:
-        model (str): The model to use for the mutation.
-        chat_samples (list<str>): A list of strings representing individual chat samples.
-        modified_mutation_messages (list<dict>): A list of JSON objects representing the modified prompts.
-        mutation_request (str): The type of mutation to apply.
-
-    Returns:
-        list<dict>: A list of JSON objects representing the mutated chat samples.
-    """
-    # TODO : fix this by making it consistent with mutate_chat_samples
-    affected_role = get_affected_role(mutation_request)
-
-    responses = llm_client.send_batch_chat_request(model, modified_mutation_messages)
-
-    mutated_chat_samples = []
-    for chat, response in zip(chat_samples, responses):
-        for msg in chat["messages"]:
-            if msg["role"] == affected_role:
-                msg["content"] = response["choices"][0]["message"]["content"]
-                break
-        mutated_chat_samples.append(chat)
-
-    return (mutated_chat_samples, modified_mutation_messages)
 
 def generate_responses(model, system_prompt, mutated_chat_samples):
     """

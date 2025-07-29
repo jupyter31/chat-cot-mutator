@@ -55,7 +55,14 @@ def display_individual_chat_sample_results():
 
     # show differences between original and mutated chat sample
     with tab2:
-        st.json(st.session_state.differences[st.session_state.chat_index])
+        if st.session_state.differences[st.session_state.chat_index]:
+            st.json(st.session_state.differences[st.session_state.chat_index])
+        else:
+            st.write(
+                "**No differences were found between the original and mutated chat sample.**\n\n"
+                "**This may be because the mutation request was not applicable to the chat samples given, or there was an error in producing the mutations.**\n\n"
+                "**Please check the mutation request and try again.**"
+            )
 
     # display original response and new response
     with tab3:

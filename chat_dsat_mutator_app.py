@@ -84,7 +84,6 @@ if submit:
             st.error(e)
 
 if st.session_state.submit_click:
-    # TODO: only allow the change of the additional mutation messages, not original chat samples
     # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
     st.subheader("Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
@@ -97,14 +96,12 @@ if st.session_state.submit_click:
     
     edit_system_prompt()
 
-    # TODO: make the data be the mutated chat samples + new responses
     # add download button for all mutated chat samples
     st.subheader("Mutated chat samples")
     
     download_all()
 
     st.subheader("Individual chat sample results")
-    # TODO: make display load lighter
     # define buttons for navigating through the individual chat samples
 
     display_individual_chat_sample_results()

@@ -27,25 +27,6 @@ def parse_embedded_json(obj):
     
     return obj
 
-def stringify_json_objects(obj):
-    """
-    Convert any embedded JSON objects to strings.
-
-    Args:
-        obj (dict or list): The object to stringify.
-    
-    Returns:
-        dict or list: The object with JSON objects converted to strings.
-    """
-    if isinstance(obj, dict):
-        return {k: json.dumps(v) if isinstance(v,dict) else stringify_json_objects(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [stringify_json_objects(x) for x in obj]
-    elif isinstance(obj, str):
-        return obj
-    
-    return obj
-
 
 def get_differences(chat_samples, mutated_chat_samples):
     """
@@ -102,20 +83,24 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
     elif affected_role == "tool":
         for chat, response in zip(chat_samples, responses):
 
-            sub_responses = json.loads(response["choices"][0]["message"]["content"])
+            try:
+                sub_responses = json.loads(response["choices"][0]["message"]["content"])
 
-            for msg in chat["messages"]:
-                if msg["role"] == affected_role and json.loads(msg["content"]).get("results") is not None:
-                    msg["content"] = json.loads(msg["content"])
+                for msg in chat["messages"]:
+                    if msg["role"] == affected_role and json.loads(msg["content"]).get("results") is not None:
+                        msg["content"] = json.loads(msg["content"])
 
-                    for i, result in enumerate(msg["content"]["results"]):
-                        reference_number = str(result["referenceNumber"])
-                        if reference_number in sub_responses.keys():
-                           msg["content"]["results"][i] = sub_responses[reference_number]
+                        for i, result in enumerate(msg["content"]["results"]):
+                            reference_number = str(result["referenceNumber"])
+                            if reference_number in sub_responses.keys():
+                                msg["content"]["results"][i] = sub_responses[reference_number]
 
-                    msg["content"] = json.dumps(msg["content"])
+                        msg["content"] = json.dumps(msg["content"])
 
-            mutated_chat_samples.append(chat)
+                mutated_chat_samples.append(chat)
+
+            except Exception:
+                raise Exception(f"There has been an error in producing the mutations. Please try again.")
 
     return (mutated_chat_samples, mutation_messages)
 

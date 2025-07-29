@@ -21,7 +21,6 @@ init_session_state({
     "chat_index": 0,
     "chat_samples": None,
     "differences": None,
-    "msgs_index": 0,
     "model": "dev-gpt-4o-gg",
     "mutated_chat_samples": None,
     "mutation_messages": None,

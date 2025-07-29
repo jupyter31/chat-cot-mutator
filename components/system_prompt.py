@@ -19,7 +19,7 @@ def init_system_prompt():
 
 
 def edit_system_prompt():
-    with st.expander("Edit system prompt", expanded=True):
+    with st.expander("Edit system prompt", expanded=False):
         for k, v in st.session_state.slider_params.items():
             st.markdown(f"**{v["label"]}**")
             st.session_state.system_prompt[k] = st.slider(

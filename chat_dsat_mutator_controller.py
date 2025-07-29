@@ -77,18 +77,17 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
         list<dict>: A list of JSON objects representing the mutated chat samples.
     """
 
-    if mutation_messages is None:
-        mutation_messages = []
-        for sample in copy.deepcopy(chat_samples):
-            message_history = {
-                "messages": sample["messages"] + list(get_mutation_messages(mutation_request))
-            }
+    requests = []
 
-            mutation_messages.append(message_history)
+    if mutation_messages is None:
+        mutation_messages = list(get_mutation_messages(mutation_request))
+
+    for sample in copy.deepcopy(chat_samples):
+        requests.append({"messages": sample["messages"] + mutation_messages})
 
     affected_role = get_affected_role(mutation_request)
 
-    responses = llm_client.send_batch_chat_request(model, mutation_messages)
+    responses = llm_client.send_batch_chat_request(model, requests)
 
     mutated_chat_samples = []
 

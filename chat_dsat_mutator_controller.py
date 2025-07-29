@@ -131,6 +131,7 @@ def mutate_chat_samples_given_prompts(model, chat_samples, modified_mutation_mes
     Returns:
         list<dict>: A list of JSON objects representing the mutated chat samples.
     """
+    # TODO : fix this by making it consistent with mutate_chat_samples
     affected_role = get_affected_role(mutation_request)
 
     responses = llm_client.send_batch_chat_request(model, modified_mutation_messages)

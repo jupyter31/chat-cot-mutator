@@ -80,7 +80,6 @@ def get_mutation_messages(mutation_request):
 
             return (
                 {
-                    # TODO: experiment with different system prompts, decide how specific we want negations to be
                     "role": "system",
                     "content": (
                         "Your job is to negate specified passages whilst maintaining correct grammar.\n"

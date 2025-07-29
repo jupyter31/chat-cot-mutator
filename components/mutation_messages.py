@@ -6,7 +6,7 @@ from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, g
 
 
 def edit_mutation_messages():
-    with st.expander("Edit messages", expanded=False):
+    with st.expander("Edit messages", expanded=True):
 
         modified_mutation_messages = st.text_area(
             "Messages",

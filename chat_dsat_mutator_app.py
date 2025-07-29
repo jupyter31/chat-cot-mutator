@@ -27,6 +27,7 @@ init_session_state({
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
+    "param_key_prefix": 0,
     "slider_params": {},
     "submit_click": False,
     "system_prompt": {}

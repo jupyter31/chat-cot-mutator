@@ -66,8 +66,12 @@ def display_individual_chat_sample_results():
 
     # display original response and new response
     with tab3:
-        st.markdown("#### New response")
-        st.write(st.session_state.new_responses[st.session_state.chat_index])
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Original response")
+            st.write(st.session_state.original_responses[st.session_state.chat_index])
+        with col2:
+            st.markdown("#### New response")
+            st.write(st.session_state.new_responses[st.session_state.chat_index])
 
-        st.markdown("#### Original response")
-        st.write(st.session_state.original_responses[st.session_state.chat_index])
+        

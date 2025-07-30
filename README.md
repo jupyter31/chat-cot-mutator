@@ -28,6 +28,7 @@
   ```
 
 ## Set up Foundry Launchpad token
+Your Foundry Launchpad token is needed to generate a link to the Copilot Playgound Diff Tool, where you will be able to compare the original and mutated chat samples.
 - Go to the [Foundry Launchpad](https://foundrylaunchpad.azurewebsites.net/) website.
 - Click on the key symbol in the top right corner to see the tokens.
 - Fetch and copy the `Launchpad` token.

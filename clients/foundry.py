@@ -11,16 +11,6 @@ _USERNAME = "dmstrati"
 _FOUNDRY_BASE_URL = "https://m365playground.prod.substrateai.microsoft.net"
 
 
-def _get_foundry_refresh_token() -> str:
-    # grab it from the browser
-    refresh_token = (
-        open(Path(__file__).parent.parent.parent / "foundry_refresh_token.txt.user")
-        .read()
-        .strip()
-    )
-    return refresh_token
-
-
 class FoundryAccessToken(NamedTuple):
     """Represents an OAuth access token."""
 
@@ -70,20 +60,9 @@ class FoundryClient:
         self.access_token = None
         self.client = httpx.Client()
 
-    def _get_token(self) -> str:
-        # if self.access_token is not None:
-        #     current_time = int(time.time())
-        #     if current_time < self.access_token.expires_on:
-        #         return self.access_token.token
-
-        # refresh_token = _get_foundry_refresh_token()
-        # self.access_token = get_foundry_token(refresh_token)
-        # return self.access_token.token
-
-        with open(Path(__file__).parent.parent / "token.txt") as f:
-            token = f.read().strip()
-        
-        return token
+    def _get_token(self) -> str:  
+        with open(Path(__file__).parent.parent / "foundry_token.txt") as f:
+            return f.read().strip()
 
     def save_diff(
         self,

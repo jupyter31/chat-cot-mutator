@@ -288,4 +288,5 @@ class LLMClient:
 
         return result["access_token"]
 
+
 llm_api_client = LLMClient(None)

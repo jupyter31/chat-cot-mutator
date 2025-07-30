@@ -49,15 +49,15 @@ def get_foundry_token(refresh_token: str) -> FoundryAccessToken:
         "Origin": _FOUNDRY_BASE_URL,
         "Referer": f"{_FOUNDRY_BASE_URL}/",
     }
-    print("Requesting Foundry access token...")
+    #print("Requesting Foundry access token...")
     response = httpx.post(
         f"https://login.microsoftonline.com/{_TENANT_ID}/oauth2/v2.0/token",
         data=data,
         headers=headers,
     )
-    print(response.status_code)
-    print(response.headers)
-    print(response.text)
+    #print(response.status_code)
+    #print(response.headers)
+    #print(response.text)
     result = response.json()
     access_token = result["access_token"]
     return FoundryAccessToken(access_token, now + int(result["expires_in"]))
@@ -91,7 +91,7 @@ class FoundryClient:
         treatment: str,
         control_label: str,
         treatment_label: str,
-        language="markdown",
+        language="json",
         diff_guid: str = None,
     ) -> str:
         diff_guid = diff_guid or str(uuid.uuid4())
@@ -113,7 +113,7 @@ class FoundryClient:
             "Referer": f"{_FOUNDRY_BASE_URL}/",
         }
 
-        print(f"Saving diff {control_label} vs {treatment_label}...")
+        #print(f"Saving diff {control_label} vs {treatment_label}...")
         response = self.client.post(
             f"{_FOUNDRY_BASE_URL}/api/v2/data/diff/save",
             json=diff_data,
@@ -124,20 +124,11 @@ class FoundryClient:
         ), f"Failed to save diff: {response.status_code} - {response.text}"
 
         final_diff_url = self.get_diff_url(diff_guid)
-        print(f"Diff saved: {final_diff_url}")
+        #print(f"Diff saved: {final_diff_url}")
         return final_diff_url
 
     def get_diff_url(self, diff_guid: str) -> str:
         return f"{_FOUNDRY_BASE_URL}/diffTool?diff={diff_guid}"
 
 
-_default_client = FoundryClient()
-save_diff = _default_client.save_diff
-get_diff_url = _default_client.get_diff_url
-
-if __name__ == "__main__":
-    client = FoundryClient()
-    diff_url = client.save_diff(
-        "this is control", "this is treatment", "control", "treatment"
-    )
-    print(diff_url)
+foundry_client = FoundryClient()

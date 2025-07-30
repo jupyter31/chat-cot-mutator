@@ -1,5 +1,6 @@
 import json
 import streamlit as st
+from clients.foundry import foundry_client
 
 
 # define button functionality
@@ -56,6 +57,15 @@ def display_individual_chat_sample_results():
     # show differences between original and mutated chat sample
     with tab2:
         if st.session_state.differences[st.session_state.chat_index]:
+            diff_url = foundry_client.save_diff(
+                json.dumps(st.session_state.chat_samples[st.session_state.chat_index], indent=2),
+                json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
+                "Original chat sample", 
+                "Mutated chat sample",
+            )
+
+            st.markdown(f"[Click here to see the mutations using the Copilot Playground Diff Tool]({diff_url})")
+            st.write("")
             st.json(st.session_state.differences[st.session_state.chat_index])
         else:
             st.write(

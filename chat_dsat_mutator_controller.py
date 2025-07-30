@@ -1,7 +1,7 @@
 import copy
 from deepdiff import DeepDiff
 import json
-from components.llm_api_client import llm_client
+from clients.llm_api import llm_api_client
 from mutation_data import get_affected_role, get_mutation_messages
 
 def parse_embedded_json(obj):
@@ -68,7 +68,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     affected_role = get_affected_role(mutation_request)
 
-    responses = llm_client.send_batch_chat_request(model, requests)
+    responses = llm_api_client.send_batch_chat_request(model, requests)
 
     mutated_chat_samples = []
 
@@ -100,7 +100,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
                 mutated_chat_samples.append(chat)
 
             except Exception:
-                raise Exception(f"There has been an error in producing the mutations. Please try again.")
+                raise Exception(f"Sorry, there has been an error in producing the mutations. Please try clicking the 'Submit' button again.")
 
     return (mutated_chat_samples, mutation_messages)
 
@@ -136,7 +136,7 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
         mutated_messages.append(system_prompt_copy)
 
     # remove original assistant reponse if it exists
-    responses = llm_client.send_batch_chat_request(model, mutated_messages)
+    responses = llm_api_client.send_batch_chat_request(model, mutated_messages)
 
     new_responses = [response["choices"][0]["message"]["content"] for response in responses]
 

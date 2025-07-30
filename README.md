@@ -27,6 +27,12 @@
   pip install -r requirements.txt
   ```
 
+## Set up Foundry Launchpad token
+- Go to the [Foundry Launchpad](https://foundrylaunchpad.azurewebsites.net/) website.
+- Click on the key symbol in the top right corner to see the tokens.
+- Fetch and copy the `Launchpad` token.
+- Create a file in the root of the repository called `foundry_token.txt` and paste the token here.
+
 ## Run the Streamlit app
 To run the Streamlit app, enter the following command:
 

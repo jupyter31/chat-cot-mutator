@@ -1,15 +1,11 @@
-import copy
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import get_differences, mutate_chat_samples, generate_responses
-
-from components.system_prompt import edit_system_prompt, init_system_prompt
+from chat_dsat_mutator_controller import run_full_process
 from components.mutation_messages import edit_mutation_messages
 from components.results import display_individual_chat_sample_results, download_all
+from components.system_prompt import edit_system_prompt, init_system_prompt
 
-
-st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
 
 # initialise session state with default values
 def init_session_state(default_states):
@@ -17,6 +13,9 @@ def init_session_state(default_states):
         if state not in st.session_state:
             st.session_state[state] = default
 
+
+st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
+           
 init_session_state({
     "chat_index": 0,
     "chat_samples": None,
@@ -29,7 +28,7 @@ init_session_state({
     "original_responses": None,
     "param_key_prefix": 0,
     "slider_params": {},
-    "submit_click": False,
+    "show_results": False,
     "system_prompt": {}
 })
 
@@ -49,6 +48,7 @@ valid_chat_samples = True
 if raw_chat_samples != ['']:
     try:
         st.session_state.chat_samples = [json.loads(chat) for chat in raw_chat_samples]
+        st.session_state.original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in st.session_state.chat_samples]
     except json.JSONDecodeError as e:
         valid_chat_samples = False
         st.error(f"Invalid JSON format: {e}")
@@ -72,19 +72,15 @@ disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_r
 submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()
-
-# call LLM API Client when submit button is clicked
 if submit:
     with st.spinner("Mutating chat samples..."):
         try:
-            st.session_state.mutated_chat_samples, st.session_state.mutation_messages = mutate_chat_samples(st.session_state.model, copy.deepcopy(st.session_state.chat_samples), st.session_state.mutation_request)
-            st.session_state.differences = get_differences(copy.deepcopy(st.session_state.chat_samples), copy.deepcopy(st.session_state.mutated_chat_samples))
-            st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
-            st.session_state.submit_click = True
+            (st.session_state.mutated_chat_samples, st.session_state.mutation_messages,st.session_state.differences, st.session_state.new_responses) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt)
+            st.session_state.show_results = True
         except Exception as e:
             st.error(e)
 
-if st.session_state.submit_click:
+if st.session_state.show_results:
     # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
     st.subheader("Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")

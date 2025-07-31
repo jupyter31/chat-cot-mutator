@@ -1,7 +1,7 @@
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import generate_responses
+from chat_dsat_mutator_controller import add_new_responses_to_mutated_chat_samples, generate_responses
 
 DEFAULT_SYSTEM_PROMPT_FILE = "system_prompts\\enterprise_copilot.json"
 
@@ -82,6 +82,7 @@ def edit_system_prompt():
     if regenerate:
         with st.spinner("Regenerating responses..."):
             try:
-                st.session_state.original_responses, st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
+                st.session_state.new_responses = generate_responses(st.session_state.model, st.session_state.system_prompt, st.session_state.mutated_chat_samples)
+                st.session_state.mutated_chat_samples = add_new_responses_to_mutated_chat_samples(st.session_state.mutated_chat_samples, st.session_state.new_responses)
             except Exception as e:
                 st.error(e)

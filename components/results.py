@@ -1,9 +1,9 @@
 import json
 import streamlit as st
+
 from clients.foundry import foundry_client
 
 
-# define button functionality
 def click_prev():
     if st.session_state.chat_index > 0:
         st.session_state.chat_index -= 1

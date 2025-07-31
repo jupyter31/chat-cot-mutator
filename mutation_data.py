@@ -6,7 +6,7 @@ def get_affected_role(mutation_request):
         mutation_request (str): The type of mutation to apply.
 
     Returns:
-        str: The role associated with the specific message we are requesting to mutate.
+        str: The role of the messages that will be modified according to the type of mutation.
     """
     return "user" if mutation_request == "Topic dilution" else "tool"
 

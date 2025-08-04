@@ -1,8 +1,6 @@
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import run_full_process
-
 DEFAULT_SYSTEM_PROMPT_FILE = "system_prompts\\enterprise_copilot.json"
 
 DEFAULT_SLIDER_PARAMS = {
@@ -27,7 +25,7 @@ def edit_system_prompt():
     with st.expander("Edit system prompt", expanded=True):
 
         # reset system prompt params to default values
-        if st.button("Reset to default"):
+        if st.button("Reset to default", key="reset_system_prompt"):
             with open(DEFAULT_SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as f:
                 st.session_state.system_prompt = json.load(f)
                 st.session_state.param_key_prefix += 1
@@ -69,21 +67,10 @@ def edit_system_prompt():
         # validate persona instructions
         try:
             st.session_state.system_prompt["messages"] = json.loads(modified_system_prompt_messages.strip())
-            valid_system_prompt = True
+            return True
         except json.JSONDecodeError as e:
-            valid_system_prompt = False
             st.error(f"Invalid JSON format in system prompt messages: {e}")
-
-        disable_system_prompt_button = (not valid_system_prompt)
-        regenerate = st.button("Regenerate responses with modified system prompt", disabled=disable_system_prompt_button)
+            return False
 
     st.divider()
     
-    if regenerate:
-        with st.spinner("Regenerating responses..."):
-            try:
-                (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt)
-                st.session_state.chat_index = 0
-
-            except Exception as e:
-                st.error(e)

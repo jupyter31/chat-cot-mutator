@@ -1,37 +1,31 @@
 import json
 import streamlit as st
 
-from chat_dsat_mutator_controller import run_full_process
+from mutation_data import get_mutation_messages
 
 
 def edit_mutation_messages():
     with st.expander("Edit messages", expanded=True):
 
+        # reset mutation messages to default values
+        if st.button("Reset to default", key="reset_mutation_messages"):
+            st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
+            st.session_state.param_key_prefix += 1
+
+
         modified_mutation_messages = st.text_area(
             "Messages",
             value=json.dumps(st.session_state.mutation_messages, indent=2),
             height="content",
+            key=f"mutation_messages_{st.session_state.param_key_prefix}",
             disabled=False,
             label_visibility="collapsed"
         )
 
         # validate the new messages
         try:
-            modified_mutation_messages = json.loads(modified_mutation_messages)
-            valid_mutation_messages = True
+            st.session_state.mutation_messages = json.loads(modified_mutation_messages)
+            return True
         except json.JSONDecodeError as e:
-            valid_mutation_messages = False
             st.error(f"Invalid JSON format in mutation messages: {e}")
-
-        disable_retry_button = (not valid_mutation_messages)
-        retry = st.button("Regenerate mutations with modified mutation messages", disabled=disable_retry_button)
-
-    st.divider()
-
-    if retry:        
-        with st.spinner("Mutating chat samples..."):
-            try:
-                (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, modified_mutation_messages)   
-                st.session_state.chat_index = 0
-            except Exception as e:
-                st.error(e)
+            return False

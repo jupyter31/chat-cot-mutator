@@ -122,7 +122,7 @@ def is_json_valid(s):
         return False
 
 
-def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages=None):
+def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages):
     """
     Mutates the chat sample based on the mutation request.
 
@@ -234,7 +234,7 @@ def parse_embedded_json(obj):
     return obj
 
 
-def run_full_process(model, chat_samples, mutation_request, system_prompt, mutation_messages=None):
+def run_full_process(model, chat_samples, mutation_request, system_prompt, mutation_messages):
     """
     Runs the full process of mutating chat samples, computing differences, and generating new responses.
 

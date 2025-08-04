@@ -5,7 +5,10 @@ from chat_dsat_mutator_controller import run_full_process
 from components.mutation_messages import edit_mutation_messages
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
+from mutation_data import get_mutation_messages
 
+
+MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 # initialise session state with default values
 def init_session_state(default_states):
@@ -45,21 +48,29 @@ uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["j
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
 
 # validate chat samples
-valid_chat_samples = True
+valid_chat_samples = False
+
 if raw_chat_samples != ['']:
     try:
         st.session_state.chat_samples = [json.loads(chat) for chat in raw_chat_samples]
         st.session_state.original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in st.session_state.chat_samples]
+        valid_chat_samples = True
     except json.JSONDecodeError as e:
-        valid_chat_samples = False
         st.error(f"Invalid JSON format: {e}")
 
 # get mutation request
 st.subheader("Mutation request")
-mutation_options = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
-mutation_request_selectbox = st.selectbox("Select mutation type", mutation_options, accept_new_options=False, index=None)
+mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_OPTIONS, accept_new_options=False, index=None)
 st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
+st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
 
+valid_mutation_messages = False
+if st.session_state.mutation_request != "":
+    # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
+    st.subheader("Mutation messages")
+    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
+
+    valid_mutation_messages = edit_mutation_messages()
 
 # get model to use
 st.subheader("Model")
@@ -68,32 +79,27 @@ st.session_state.model = st.text_input(
     value="dev-gpt-4o-gg"
 )
 
+# expose the system prompt used for generating the new responses
+st.subheader("System prompt for response generation")
+st.write("The parameters below were used in the system prompt to generate the new responses. You can use it to understand how the responses were generated, or modify the parameters and regenerate the responses.")
+    
+valid_system_prompt = edit_system_prompt()
+
 # enabled submit button if inputs are valid and a mutation request has been provided
-disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (st.session_state.model.strip() == "")
+disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
 submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()
 if submit:
     with st.spinner("Mutating chat samples..."):
         try:
-            (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt)
+            (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
             st.session_state.chat_index = 0
             st.session_state.show_results = True
         except Exception as e:
             st.error(e)
 
 if st.session_state.show_results:
-    # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
-    st.subheader("Mutation messages")
-    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
-
-    edit_mutation_messages()
-
-    # expose the system prompt used for generating the new responses
-    st.subheader("System prompt")
-    st.write("The parameters below were used in the system prompt to generate the new responses. You can use it to understand how the responses were generated, or modify the parameters and regenerate the responses.")
-    
-    edit_system_prompt()
 
     # add download button for all mutated chat samples
     st.subheader("Mutated chat samples")

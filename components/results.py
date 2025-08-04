@@ -81,4 +81,4 @@ def display_individual_chat_sample_results():
                 st.write(st.session_state.new_responses[st.session_state.chat_index])
 
     else:
-        st.error(f"Chat sample {st.session_state.chat_index + 1} failed with error: {st.session_state.errors[st.session_state.chat_index]}")        
+        st.error(f"Chat sample {st.session_state.chat_index + 1} failed with error: {st.session_state.errors[st.session_state.chat_index]}")

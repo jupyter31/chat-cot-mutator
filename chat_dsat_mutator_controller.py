@@ -271,10 +271,13 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
     differences = [None] * len(chat_samples)
     responses = [None] * len(chat_samples)
 
-    for i, chat, diff, response in zip(res_successes, raw_mutated_chat_samples, raw_differences, raw_responses):
-        mutated_chat_samples[i] = chat
-        differences[i] = diff if diff != {} else None
-        responses[i] = response
+    for i in res_successes:
+        mutated_chat_samples[i] = raw_mutated_chat_samples[i]
+
+        diff = raw_differences[mut_successes.index(i)]
+        differences[i] = diff if diff else None
+
+        responses[i] = raw_responses[diff_successes.index(i)]
 
     return (mutated_chat_samples, mutation_messages, differences, responses, errors)
 

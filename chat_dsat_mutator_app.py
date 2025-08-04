@@ -102,8 +102,8 @@ if st.session_state.show_results:
     
     download_all()
 
-    st.subheader("Individual chat sample results")
     # define buttons for navigating through the individual chat samples
+    st.subheader("Individual chat sample results")
 
     display_individual_chat_sample_results()
     

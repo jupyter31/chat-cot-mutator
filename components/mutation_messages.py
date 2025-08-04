@@ -31,6 +31,7 @@ def edit_mutation_messages():
     if retry:        
         with st.spinner("Mutating chat samples..."):
             try:
-                (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, modified_mutation_messages)   
+                (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, modified_mutation_messages)   
+                st.session_state.chat_index = 0
             except Exception as e:
                 st.error(e)

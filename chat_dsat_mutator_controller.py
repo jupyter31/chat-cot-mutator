@@ -6,6 +6,10 @@ from clients.llm_api import llm_api_client
 from mutation_data import get_affected_role, get_mutation_messages
 
 
+# maximum number of times that the mutation / response generation process will be retried
+MAX_RETRY = 5
+
+
 def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_responses):
     """
     Adds the new responses to the mutated chat samples.
@@ -61,7 +65,26 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    return [response["choices"][0]["message"]["content"] for response in responses]
+    response_contents = [r["choices"][0]["message"]["content"] for r in responses]
+
+    # retry response generation for any responses that are None
+    retry = MAX_RETRY
+    while retry > 0:
+        failed_indices = [i for i, r in enumerate(response_contents) if r is None]
+        if not failed_indices:
+            break
+
+        retry_requests = [requests[i] for i in failed_indices]
+        retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+        retry_response_contents = [r["choices"][0]["message"]["content"] for r in retry_responses]
+
+        for i, retry_response in enumerate(retry_response_contents):
+            if retry_response is not None:
+                response_contents[failed_indices[i]] = retry_response
+        
+        retry -= 1
+
+    return response_contents
 
 
 def get_differences(chat_samples, mutated_chat_samples):
@@ -80,6 +103,23 @@ def get_differences(chat_samples, mutated_chat_samples):
     mutated_chat_samples = copy.deepcopy(mutated_chat_samples)
 
     return [DeepDiff(parse_embedded_json(chat_sample), parse_embedded_json(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
+
+
+def is_json_valid(s):
+    """
+    Checks if a string is valid JSON.
+
+    Args:
+        s (str): The string to check.
+
+    Returns:
+        bool: True if the string is valid JSON, False otherwise.
+    """
+    try:
+        json.loads(s)
+        return True
+    except ValueError:
+        return False
 
 
 def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages=None):
@@ -111,25 +151,43 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
+    response_contents = [r["choices"][0]["message"]["content"] for r in responses]
 
     affected_role = get_affected_role(mutation_request)
 
     mutated_chat_samples = []
     if affected_role == "user":
         # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples, responses):
+        for chat, response in zip(chat_samples, response_contents):
             for msg in chat["messages"]:
                 if msg["role"] == affected_role:
-                    msg["content"] = response["choices"][0]["message"]["content"]
+                    msg["content"] = response
 
             mutated_chat_samples.append(chat)
 
     elif affected_role == "tool":
-        # replace content of tool messages with mutated content
-        for chat, response in zip(chat_samples, responses):
-            try:
-                sub_responses = json.loads(response["choices"][0]["message"]["content"])
+        # retry performing mutations for any responses that are not valid JSON
+        retry = MAX_RETRY
+        while retry > 0:   
+            failed_indices = [i for i, r in enumerate(response_contents) if not is_json_valid(r)]
+            if not failed_indices:
+                break
 
+            retry_requests = [requests[i] for i in failed_indices]
+            retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+            retry_response_contents = [r["choices"][0]["message"]["content"] for r in retry_responses]
+
+            for i, retry_response in zip(failed_indices, retry_response_contents):
+                if is_json_valid(retry_response):
+                    response_contents[i] = json.loads(retry_response)
+
+            retry -= 1
+
+        # replace content of tool messages with mutated content
+        failed_indices = []
+        for i, (chat, response) in enumerate(zip(chat_samples, response_contents)):
+            try:
+                response = json.loads(response)
                 for msg in chat["messages"]:
                     if msg["role"] == affected_role and json.loads(msg["content"]).get("results") is not None:
                         msg["content"] = json.loads(msg["content"])
@@ -137,15 +195,17 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
                         for i, result in enumerate(msg["content"]["results"]):
                             # use the reference number from the result to know which values to replace
                             reference_number = str(result["referenceNumber"])
-                            if reference_number in sub_responses.keys():
-                                msg["content"]["results"][i] = sub_responses[reference_number]
+                            if reference_number in response.keys():
+                                msg["content"]["results"][i] = response[reference_number]
 
                         msg["content"] = json.dumps(msg["content"])
 
                 mutated_chat_samples.append(chat)
 
             except Exception:
-                raise Exception(f"Sorry, there has been an error in producing the mutations. Please try clicking the 'Submit' button again.")
+                # put None where the mutation failed
+                mutated_chat_samples.append(None)
+                failed_indices.append(i)
 
     return (mutated_chat_samples, mutation_messages)
 
@@ -190,12 +250,32 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
         list<dict>: The messages used to perform the mutations.
         list<dict>: The differences between the original and mutated chat samples.
         list<str>: The new responses generated from the mutated chat samples.
+        list<int>: The indices of the chat samples that failed the mutation process.
     """
-    mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages)
-    differences = get_differences(chat_samples, mutated_chat_samples)
-    new_responses = generate_responses(model, system_prompt, mutated_chat_samples)
-    mutated_chat_samples = add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_responses)
 
-    return (mutated_chat_samples, mutation_messages, differences, new_responses)
+    raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages)
+    mut_successes = [i for i, chat in enumerate(raw_mutated_chat_samples) if chat is not None]
+    errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}
+
+    raw_differences = get_differences([chat_samples[i] for i in mut_successes], [raw_mutated_chat_samples[i] for i in mut_successes])
+    diff_successes = [i for i, diff in zip(mut_successes, raw_differences) if diff != {}]
+    errors.update({i: "No differences were found between the original and mutated chat sample." for i, diff in zip(mut_successes, raw_differences) if diff == {}})
+
+    raw_responses = generate_responses(model, system_prompt, [raw_mutated_chat_samples[i] for i in diff_successes])
+    res_successes = [i for i, response in zip(diff_successes, raw_responses) if response is not None]
+    errors.update({i: f"Response generation failed after {MAX_RETRY} attempts." for i, response in zip(diff_successes, raw_responses) if response is None})
+
+    raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[i] for i in res_successes])
+
+    mutated_chat_samples = [None] * len(chat_samples)
+    differences = [None] * len(chat_samples)
+    responses = [None] * len(chat_samples)
+
+    for i, chat, diff, response in zip(res_successes, raw_mutated_chat_samples, raw_differences, raw_responses):
+        mutated_chat_samples[i] = chat
+        differences[i] = diff if diff != {} else None
+        responses[i] = response
+
+    return (mutated_chat_samples, mutation_messages, differences, responses, errors)
 
 

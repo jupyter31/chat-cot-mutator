@@ -2,13 +2,10 @@ import json
 import streamlit as st
 
 from chat_dsat_mutator_controller import run_full_process
-from components.mutation_messages import edit_mutation_messages
+from components.mutation_request import edit_mutation_messages, get_mutation_request
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
-from mutation_data import get_mutation_messages
 
-
-MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 # initialise session state with default values
 def init_session_state(default_states):
@@ -60,9 +57,8 @@ if raw_chat_samples != ['']:
 
 # get mutation request
 st.subheader("Mutation request")
-mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_OPTIONS, accept_new_options=False, index=None)
-st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
-st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
+
+get_mutation_request()
 
 valid_mutation_messages = False
 if st.session_state.mutation_request != "":

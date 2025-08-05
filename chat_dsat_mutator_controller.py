@@ -265,16 +265,19 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
     res_successes = [i for i, response in zip(diff_successes, raw_responses) if response is not None]
     errors.update({i: f"Response generation failed after {MAX_RETRY} attempts." for i, response in zip(diff_successes, raw_responses) if response is None})
 
-    raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[i] for i in res_successes])
+    raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[diff_successes.index(i)] for i in res_successes])
 
     mutated_chat_samples = [None] * len(chat_samples)
     differences = [None] * len(chat_samples)
     responses = [None] * len(chat_samples)
 
-    for i, chat, diff, response in zip(res_successes, raw_mutated_chat_samples, raw_differences, raw_responses):
-        mutated_chat_samples[i] = chat
-        differences[i] = diff if diff != {} else None
-        responses[i] = response
+    for i in res_successes:
+        mutated_chat_samples[i] = raw_mutated_chat_samples[diff_successes.index(i)]
+
+        diff = raw_differences[mut_successes.index(i)]
+        differences[i] = diff if diff else None
+
+        responses[i] = raw_responses[diff_successes.index(i)]
 
     return (mutated_chat_samples, mutation_messages, differences, responses, errors)
 

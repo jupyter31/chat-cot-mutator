@@ -20,6 +20,7 @@ init_session_state({
     "chat_index": 0,
     "chat_samples": None,
     "differences": None,
+    "diff_urls": None,
     "errors": {},
     "model": "dev-gpt-4o-gg",
     "mutated_chat_samples": None,
@@ -90,10 +91,18 @@ if submit:
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.chat_index = 0
-            (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+
+            (
+                st.session_state.mutated_chat_samples, 
+                st.session_state.mutation_messages, 
+                st.session_state.differences, 
+                st.session_state.diff_urls, 
+                st.session_state.new_responses, 
+                st.session_state.errors
+            ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+            
             st.session_state.show_results = True
         except Exception as e:
-            print("here")
             st.error(e)
 
 if st.session_state.show_results:

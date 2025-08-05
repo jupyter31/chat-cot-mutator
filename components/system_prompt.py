@@ -22,7 +22,7 @@ def init_system_prompt():
 
 
 def edit_system_prompt():
-    with st.expander("Edit system prompt", expanded=True):
+    with st.expander("Edit system prompt", expanded=False):
 
         # reset system prompt params to default values
         if st.button("Reset to default", key="reset_system_prompt"):

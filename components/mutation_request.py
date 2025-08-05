@@ -7,10 +7,11 @@ from mutation_data import get_mutation_messages
 MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 def edit_mutation_messages():
-    with st.expander("Edit messages", expanded=True):
+    with st.expander("Edit messages", expanded=False):
 
         # reset mutation messages to default values
         if st.button("Reset to default", key="reset_mutation_messages"):
+            # TODO: handle customisations
             st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
             st.session_state.param_key_prefix += 1
 
@@ -36,4 +37,106 @@ def edit_mutation_messages():
 def get_mutation_request():
     mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_OPTIONS, accept_new_options=False, index=None)
     st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
-    st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
+    customisations = get_mutation_customisation()
+    st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request, customisations))
+
+
+def get_mutation_customisation():
+    match st.session_state.mutation_request:
+        case "Salience drop":
+            number = st.slider(
+                "Select the number of salient passages to drop",
+                min_value=1,
+                max_value=5,
+                value=1,
+                step=1,
+            )
+
+            return {"number": number}
+        
+        case "Claim-aligned deletion":
+            # TODO
+            pass
+
+        case "Topic dilution":
+            level = st.radio(
+                "Select the plausibility of the topic dilution",
+                options=["high", "medium", "low"],
+                index=0,
+                format_func=lambda x: f"{x.title()} plausibility",
+                horizontal=True
+            )
+
+            return {"level": level}
+        
+        case "Negated-evidence injection":
+            # TODO
+            pass
+
+        case "Date / number jitter":
+            # TODO: enforce at least one selection
+            categories = st.multiselect(
+                "Select the categories to apply jitter to",
+                options=["date", "number"],
+                default=["date", "number"],
+                format_func=lambda x: f"{x.title()}s",
+            )
+
+            return {"categories": categories}
+        
+        case "Passage shuffle":
+            preserve_logical_flow = st.checkbox(
+                "Preserve the logical flow of passages",
+                value = False
+            )
+
+            return {"preserve_logical_flow": preserve_logical_flow}
+
+        case "Entity swap":
+            # TODO: enforce at least one selection
+            entity_types = st.multiselect(
+                "Select the types of entities to swap",
+                options=["names", "locations", "organisations", "dates", "times", "quantities with units"],
+                default=["names"],
+                format_func=lambda x: f"{x.title()}",
+            )
+
+            number = st.slider(
+                "Select the number of entity swaps that should be performed",
+                min_value=1,
+                max_value=5,
+                value=1,
+                step=1,
+            )
+            
+            return {"entity_types": entity_types, "number": number}
+
+        case "Document-snippet cut-off":
+            # TODO
+            pass
+
+        case "Unit-conversion rewrite":
+            # TODO: enforce at least one selection
+            unit_types = st.multiselect(
+                "Select the types of measurements to rewrite",
+                options=["distance", "temperate", "time", "mass / weight", "speed", "area", "data storage"],
+                default=["time"],
+                format_func=lambda x: f"{x.title()}",
+            )
+
+            return {"unit_types": unit_types}
+        
+        case "Ablate URL links":
+            # multiple choice of 'remove along with context', 'replace with placeholder'
+            handling_choice = st.radio(
+                "Select how to handle URL links",
+                options=["remove", "replace"],
+                index=0,
+                format_func=lambda x: "Remove along with surrounding context" if x == "remove" else "Replace with placeholder",
+            )
+
+            return {"handling_choice": handling_choice}
+        
+        case _:
+            pass
+

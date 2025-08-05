@@ -58,7 +58,9 @@ class FoundryClient:
 
     def __init__(self):
         self.access_token = None
-        self.client = httpx.Client()
+        
+        timeout = httpx.Timeout(connect=10.0, read=10.0, write=10.0, pool=10.0)
+        self.client = httpx.Client(timeout=timeout)
 
     def _get_token(self) -> str:  
         with open(Path(__file__).parent.parent /"launchpad_token.txt") as f:
@@ -88,6 +90,7 @@ class FoundryClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._get_token()}",
             "Accept": "application/json",
+            "Connection": "keep-alive",
             "Origin": _FOUNDRY_BASE_URL,
             "Referer": f"{_FOUNDRY_BASE_URL}/",
         }

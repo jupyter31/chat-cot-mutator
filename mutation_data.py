@@ -11,12 +11,13 @@ def get_affected_role(mutation_request):
     return "user" if mutation_request == "Topic dilution" else "tool"
 
 
-def get_mutation_messages(mutation_request):
+def get_mutation_messages(mutation_request, customisations=None):
     """
     Returns the messages used to perform the mutation.
 
     Args:
         mutation_request (str): The type of mutation to apply.
+        customisations (dict, optional): Customisation parameters for the mutation, if any.
 
     Returns:
         dict: The system message used to explain the the LLM's role.
@@ -28,24 +29,26 @@ def get_mutation_messages(mutation_request):
             # Salience drop involves deleting the passage whose tokens have the largest attribution with respect to the answer.
             # This means that we remove passages from the context that have the largest influence on the answer.
 
+            customisations["plural"] = "s" if customisations["number"] > 1 else ""
+
             return (
                 {
                     "role": "system",
                     "content": (
-                        "Your task is to process tool-generated messages and extract the most influential content used in assistant responses."
-                    ),
+                        "Your task is to process tool-generated messages and extract the most influential content{plural} used in assistant responses."
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
-                        "1. Identify the passage most directly used or paraphrased in the assistant's reply.\n"
-                        "2. Remove only that salient passage from the `content` field.\n"
+                        "1. Identify the top {number} passage{plural} most directly used or paraphrased in the assistant's reply.\n"
+                        "2. Remove only the {number} most salient passage{plural} from the `content` field.\n"
                         "3. Do not remove any object keys.\n"
                         "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
@@ -61,19 +64,19 @@ def get_mutation_messages(mutation_request):
                 {
                     "role": "system",
                     "content": (
-                        "Your task is to introduce realistic spelling, keyboard proximity, and visual similarity errors into user-written text.\n"
+                        "Your task is to introduce spelling, keyboard proximity, and visual similarity errors into user-written text with a {level} plausibility level.\n"
                         "- Keyboard proximity errors occur when adjacent keys are mistakenly pressed.\n"
                         "- Visual similarity errors involve substituting characters that look alike (e.g., '0' for 'O', '1' for 'l')."
-                    ),
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, identify the original user message.\n"
                         "Then:\n"
-                        "- Rewrite it with plausible spelling mistakes, keyboard proximity errors, and visual similarity errors.\n"
+                        "- Rewrite it with spelling mistakes, keyboard proximity errors, and visual similarity errors with a {level} plausibility level.\n"
                         "- Return only the altered message as a single string, without any commentary or explanation."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
@@ -105,40 +108,58 @@ def get_mutation_messages(mutation_request):
         case "Date / number jitter":
             # Date / number jitter involves making date-swap and number-swap edits.
 
+            customisations["written_categories"] = (" and ").join(customisations["categories"])
+
+            customisations["system_message"] = "".join([
+                "- Replace dates with plausible alternatives (e.g., past dates with other past dates).\n" if "date" in customisations["categories"] else "",
+                "- Replace numbers (e.g., measurements, labels, section numbers) with different but reasonable values." if "number" in customisations["categories"] else ""
+            ])
+
+            instructions = []
+            if "date" in customisations["categories"]:
+                instructions.append("Replace dates with different plausible dates.\n")
+            if "number" in customisations["categories"]:
+                instructions.append("Replace numbers with different reasonable values.\n")
+            instructions.extend([
+                "Do not change anything that is not a date or number.\n",
+                "Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
+            ])
+            customisations["user_message"] = "".join(f"{i+1}. {step}" for i, step in enumerate(instructions))
+
             return (
                 {
                     "role": "system",
                     "content": ( 
-                        "Your task is to apply realistic date and number jitter to tool-generated content.\n"
-                        "- Replace dates with plausible alternatives (e.g., past dates with other past dates).\n"
-                        "- Replace numbers (e.g., measurements, labels, section numbers) with different but reasonable values.\n"
+                        "Your task is to apply realistic {written_categories} jitter to tool-generated content.\n"
+                        "{system_message}"
                         "- Do not remove any object keys."
-                    ),
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
-                        "1. Replace dates with different plausible dates.\n"
-                        "2. Replace numbers with different reasonable values.\n"
-                        "3. Do not change anything that is not a date or number.\n"
-                        "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
+                        "{user_message}"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
         case "Passage shuffle":
             # Passage shuffle randomises the passage order to test position bias.
 
+            customisations["preserve"] = "Preserve" if customisations["preserve_logical_flow"] else "Do not preserve"
+            customisations["coherent_sense"] = "makes coherent sense" if customisations["preserve_logical_flow"] else "does not make coherent sense"
+
             return (
                 {
                     "role": "system",
                     "content": (
                         "Your task is to randomize and shuffle the order of passages within tool-generated content.\n"
+                        "{preserve} the logical flow of the passages so that the shuffled output {coherent_sense}.\n"
                         "Do not remove any object keys or modify entity names, file names, or references."
-                    ),
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
@@ -146,39 +167,44 @@ def get_mutation_messages(mutation_request):
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
                         "1. Identify the factual claims or general statements that were used or paraphrased in the assistant's response.\n"
-                        "2. Rewrite the `content` field to shuffle the order of the passages.\n"
+                        "2. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
                         "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
         case "Entity swap":
             # Entity swapping involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
 
+            customisations["written_entity_types"] = (", ").join(customisations["entity_types"])
+
+            customisations["entity_plural"] = "entities" if customisations["number"] > 1 else "entity"
+            customisations["each_of_the"] = "each of the" if customisations["number"] > 1 else "the"
+
             return (
                 {
                     "role": "system",
                     "content": (
                         "Your task is to perform entity swapping on tool-generated content.\n"
-                        "- Replace entities such as names, locations, dates, times, quantities with units, and organizations with other entities of the same type.\n"
+                        "- Replace only entities of the following types with other entities of the same type: {written_entity_types}.\n"
                         "- Use only entities that have already appeared in the conversation.\n"
                         "- Ensure consistency of swaps across all messages."
-                    ),
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "Then:\n"
-                        "1. Identify entities relevant to the original user message and assistant response.\n"
-                        "2. Replace each entity in the tool content with another of the same type that has appeared in the conversation.\n"
+                        "1. Identify entities ({written_entity_types}) relevant to the original user message and assistant response.\n"
+                        "2. Replace {each_of_the} {number} most relevant {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
                         "3. Ensure entity swaps are consistent across all messages.\n"
                         "4. Do not remove any object keys.\n"
                         "5. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
@@ -188,6 +214,8 @@ def get_mutation_messages(mutation_request):
 
         case "Unit-conversion rewrite":
             # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
+
+            customisations["written_unit_types"] = (", ").join(customisations["unit_types"])
 
             return (
                 {
@@ -211,13 +239,13 @@ def get_mutation_messages(mutation_request):
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
-                        "1. Locate any units of measurement (e.g., time, distance, temperature, quantity).\n"
+                        "1. Locate any units of measurement that pertain to {written_unit_types}.\n"
                         "2. Replace each unit with a different unit of the same type, keeping the numerical value unchanged.\n"
                         "3. Do not modify anything that is not a unit.\n"
                         "4. Do not remove any object keys."
                         "5. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 
@@ -225,26 +253,33 @@ def get_mutation_messages(mutation_request):
             # Ablate URL links involves removing all URLs from the chat sample.
             # This means that the LLM does not have the the ability to access these information sources.
 
+            if customisations["handling_choice"] == "remove":
+                customisations["system_message"] = "- Remove the surrounding phrases if necessary to maintain fluency."
+                customisations["user_message"] = "Remove all URLs from the `content` field, and adjust surrounding text to maintain grammatical correctness."
+            else:
+                customisations["system_message"] = "- Replace URLs with a placeholder such as '[URL link removed]'."
+                customisations["user_message"] = "1. Replace all URLs in the `content` field with a placeholder such as '[URL link removed]'."
+
             return (
                 {
                     "role": "system",
                     "content": (   
                         "Your task is to remove all URLs from tool-generated content while preserving correct grammar.\n"
-                        "- You may remove surrounding phrases if necessary to maintain fluency.\n"
-                        "- Alternatively, you may replace URLs with a placeholder such as '[link removed]'."
-                    ),
+                        "- URL links typically start with 'http://', 'https://', or 'www.'.\n"
+                        "- URL links typically end with a top-level domain such as '.com', '.org', and '.net'.\n"
+                        "{system_message}"
+                    ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
-                        "1. Remove all URLs from the `content` field.\n"
-                        "2. Adjust surrounding text to maintain grammatical correctness.\n"
-                        "3. Do not remove any object keys.\n"
-                        "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
+                        "1. {user_message}\n"
+                        "2. Do not remove any object keys.\n"
+                        "3. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
                         "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
+                    ).format_map(customisations),
                 }
             )
 

@@ -1,9 +1,10 @@
 import json
 import streamlit as st
 
-from mutation_data import get_mutation_messages, MUTATION_OPTIONS, DEFAULT_MUTATION_CUSTOMISATIONS
+from mutation_data import get_mutation_messages
 
 
+MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 def edit_mutation_messages():
     with st.expander("Edit messages", expanded=False):
@@ -13,6 +14,7 @@ def edit_mutation_messages():
             # TODO: handle customisations
             st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
             st.session_state.param_key_prefix += 1
+
 
         modified_mutation_messages = st.text_area(
             "Messages",
@@ -46,7 +48,7 @@ def get_mutation_customisation():
                 "Select the number of salient passages to drop",
                 min_value=1,
                 max_value=5,
-                value=DEFAULT_MUTATION_CUSTOMISATIONS["Salience drop"]["number"],
+                value=1,
                 step=1,
             )
 
@@ -60,7 +62,7 @@ def get_mutation_customisation():
             level = st.radio(
                 "Select the plausibility of the topic dilution",
                 options=["high", "medium", "low"],
-                index=["high", "medium", "low"].index(DEFAULT_MUTATION_CUSTOMISATIONS["Topic dilution"]["level"]),
+                index=0,
                 format_func=lambda x: f"{x.title()} plausibility",
                 horizontal=True
             )
@@ -76,8 +78,8 @@ def get_mutation_customisation():
             categories = st.multiselect(
                 "Select the categories to apply jitter to",
                 options=["date", "number"],
-                default=DEFAULT_MUTATION_CUSTOMISATIONS["Date / number jitter"]["categories"],
-                format_func=lambda x: f"{x.title()}s"
+                default=["date", "number"],
+                format_func=lambda x: f"{x.title()}s",
             )
 
             return {"categories": categories}
@@ -95,16 +97,16 @@ def get_mutation_customisation():
             entity_types = st.multiselect(
                 "Select the types of entities to swap",
                 options=["names", "locations", "organisations", "dates", "times", "quantities with units"],
-                default=DEFAULT_MUTATION_CUSTOMISATIONS["Entity swap"]["entity_types"],
-                format_func=lambda x: f"{x.title()}"
+                default=["names"],
+                format_func=lambda x: f"{x.title()}",
             )
 
             number = st.slider(
                 "Select the number of entity swaps that should be performed",
                 min_value=1,
                 max_value=5,
-                value= DEFAULT_MUTATION_CUSTOMISATIONS["Entity swap"]["number"],
-                step=1
+                value=1,
+                step=1,
             )
             
             return {"entity_types": entity_types, "number": number}
@@ -118,8 +120,8 @@ def get_mutation_customisation():
             unit_types = st.multiselect(
                 "Select the types of measurements to rewrite",
                 options=["distance", "temperate", "time", "mass / weight", "speed", "area", "data storage"],
-                default= DEFAULT_MUTATION_CUSTOMISATIONS["Unit-conversion rewrite"]["unit_types"],
-                format_func=lambda x: f"{x.title()}"
+                default=["time"],
+                format_func=lambda x: f"{x.title()}",
             )
 
             return {"unit_types": unit_types}
@@ -129,12 +131,12 @@ def get_mutation_customisation():
             handling_choice = st.radio(
                 "Select how to handle URL links",
                 options=["remove", "replace"],
-                index=["remove", "replace"].index(DEFAULT_MUTATION_CUSTOMISATIONS["Ablate URL links"]["handling_choice"]),
+                index=0,
                 format_func=lambda x: "Remove along with surrounding context" if x == "remove" else "Replace with placeholder",
-                horizontal=True
             )
 
             return {"handling_choice": handling_choice}
         
         case _:
             pass
+

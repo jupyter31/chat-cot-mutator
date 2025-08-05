@@ -1,20 +1,3 @@
-DEFAULT_MUTATION_CUSTOMISATIONS = {
-    "Salience drop": {"number": 1},
-    #"Claim-aligned deletion": None,
-    "Topic dilution": {"level": "high"},
-    #"Negated-evidence injection": None,
-    "Date / number jitter": {"categories": ["date", "number"]},
-    "Passage shuffle": {"preserve_logical_flow": False},
-    "Entity swap": {"entity_types": ["names"], "number": 1},
-    #"Document-snippet cut-off": None,
-    "Unit-conversion rewrite": {"unit_types": ["time"]},
-    "Ablate URL links": {"handling_choice": "remove"},
-}
-
-
-MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
-
-
 def get_affected_role(mutation_request):
     """
     Returns the role associated with the specific message we are requesting to mutate.
@@ -40,9 +23,6 @@ def get_mutation_messages(mutation_request, customisations=None):
         dict: The system message used to explain the the LLM's role.
         dict: The user message used to perform the mutation.
     """
-
-    if not customisations:
-        customisations = DEFAULT_MUTATION_CUSTOMISATIONS.get(mutation_request, {})
 
     match mutation_request:
         case "Salience drop":

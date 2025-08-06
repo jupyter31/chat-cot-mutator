@@ -282,7 +282,6 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
     errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}
 
     raw_differences = get_differences([chat_samples[i] for i in mut_successes], [raw_mutated_chat_samples[i] for i in mut_successes])
-    raw_diff_urls = get_diff_urls([chat_samples[i] for i in mut_successes], [raw_mutated_chat_samples[i] for i in mut_successes])
     diff_successes = [i for i, diff in zip(mut_successes, raw_differences) if diff != {}]
     errors.update({i: "No differences were found between the original and mutated chat sample." for i, diff in zip(mut_successes, raw_differences) if diff == {}})
 
@@ -292,6 +291,7 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
     errors.update({i: f"Response generation failed after {MAX_RETRY} attempts." for i, response in zip(diff_successes, raw_responses) if response is None})
 
     raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[diff_successes.index(i)] for i in res_successes])
+    raw_diff_urls = get_diff_urls([chat_samples[i] for i in mut_successes], [raw_mutated_chat_samples[diff_successes.index(i)] for i in mut_successes])
 
     mutated_chat_samples = [None] * len(chat_samples)
     differences = [None] * len(chat_samples)

@@ -4,21 +4,21 @@ import streamlit as st
 from mutation_data import get_mutation_messages, MUTATION_OPTIONS, DEFAULT_MUTATION_CUSTOMISATIONS
 
 
+def init_mutation_customisations():
+    for mutation_type, params in DEFAULT_MUTATION_CUSTOMISATIONS.items():
+        for param, default_value in params.items():
+            if f"{mutation_type}_{param}" not in st.session_state:
+                st.session_state[f"{mutation_type}_{param}"] = default_value
+
+
 def edit_mutation_messages():
     with st.expander("Edit messages", expanded=False):
-
-        # reset mutation messages to default values
-        if st.button("Reset to default", key="reset_mutation_messages"):
-            # TODO: handle customisations
-            st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
-            st.session_state.param_key_prefix += 1
-
 
         modified_mutation_messages = st.text_area(
             "Messages",
             value=json.dumps(st.session_state.mutation_messages, indent=2),
             height="content",
-            key=f"mutation_messages_{st.session_state.param_key_prefix}",
+            key=f"mutation_messages_{st.session_state.key_suffix}",
             disabled=False,
             label_visibility="collapsed"
         )
@@ -35,21 +35,38 @@ def edit_mutation_messages():
 def get_mutation_request():
     mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_OPTIONS, accept_new_options=False, index=None)
     st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
+    
+    if st.session_state.mutation_request != "":
+        # reset customisations and mutation messages to default values
+        if st.button("Reset to default", key="reset_mutation_messages"):
+            for mutation_type, params in DEFAULT_MUTATION_CUSTOMISATIONS.items():
+                for param, default_value in params.items():
+                    st.session_state[f"{mutation_type}_{param}"] = default_value
+
+            st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
+            st.session_state.key_suffix += 1
+
     customisations = get_mutation_customisation()
     st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request, customisations))
 
 
 def get_mutation_customisation():
+
+    st.markdown("##### Mutation customisations")
+
     match st.session_state.mutation_request:
+        # TODO: figure out how this gets its values!?!?
         case "Salience drop":
             number = st.slider(
                 "Select the number of salient passages to drop",
                 min_value=1,
                 max_value=5,
-                value=1,
                 step=1,
+                key=f"{st.session_state.mutation_request}_number_{st.session_state.key_suffix}"
             )
 
+            print(number)
+            st.session_state[f"{st.session_state.mutation_request}_number"] = number
             return {"number": number}
         
         case "Claim-aligned deletion":

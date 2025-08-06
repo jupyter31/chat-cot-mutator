@@ -2,7 +2,7 @@ import json
 import streamlit as st
 
 from chat_dsat_mutator_controller import run_full_process
-from components.mutation_request import edit_mutation_messages, get_mutation_request
+from components.mutation_request import edit_mutation_messages, get_mutation_request, init_mutation_customisations
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
 
@@ -28,11 +28,13 @@ init_session_state({
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
-    "param_key_prefix": 0,
+    "key_suffix": 0,
     "slider_params": {},
     "show_results": False,
     "system_prompt": {}
 })
+
+init_mutation_customisations()
 
 init_system_prompt()
 
@@ -64,7 +66,7 @@ get_mutation_request()
 valid_mutation_messages = False
 if st.session_state.mutation_request != "":
     # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
-    st.subheader("Mutation messages")
+    st.markdown("##### Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
 
     valid_mutation_messages = edit_mutation_messages()

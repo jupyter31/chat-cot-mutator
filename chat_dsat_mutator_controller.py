@@ -166,7 +166,6 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # get default mutation messages if not provided
     if mutation_messages is None:
-        # TODO: handle customisations
         mutation_messages = list(get_mutation_messages(mutation_request))
 
     # add mutation messages to each chat sample

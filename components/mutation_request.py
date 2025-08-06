@@ -1,10 +1,8 @@
 import json
 import streamlit as st
 
-from mutation_data import get_mutation_messages
+from mutation_data import get_mutation_messages, MUTATION_OPTIONS, DEFAULT_MUTATION_CUSTOMISATIONS
 
-
-MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 def edit_mutation_messages():
     with st.expander("Edit messages", expanded=False):
@@ -62,7 +60,7 @@ def get_mutation_customisation():
             level = st.radio(
                 "Select the plausibility of the topic dilution",
                 options=["high", "medium", "low"],
-                index=0,
+                index=["high", "medium", "low"].index(DEFAULT_MUTATION_CUSTOMISATIONS["Topic dilution"]["level"]),
                 format_func=lambda x: f"{x.title()} plausibility",
                 horizontal=True
             )
@@ -78,7 +76,7 @@ def get_mutation_customisation():
             categories = st.multiselect(
                 "Select the categories to apply jitter to",
                 options=["date", "number"],
-                default=["date", "number"],
+                default=DEFAULT_MUTATION_CUSTOMISATIONS["Date / number jitter"]["categories"],
                 format_func=lambda x: f"{x.title()}s",
             )
 
@@ -87,7 +85,7 @@ def get_mutation_customisation():
         case "Passage shuffle":
             preserve_logical_flow = st.checkbox(
                 "Preserve the logical flow of passages",
-                value = False
+                value=DEFAULT_MUTATION_CUSTOMISATIONS["Passage shuffle"]["preserve_logical_flow"],
             )
 
             return {"preserve_logical_flow": preserve_logical_flow}
@@ -97,7 +95,7 @@ def get_mutation_customisation():
             entity_types = st.multiselect(
                 "Select the types of entities to swap",
                 options=["names", "locations", "organisations", "dates", "times", "quantities with units"],
-                default=["names"],
+                default=DEFAULT_MUTATION_CUSTOMISATIONS["Entity swap"]["entity_types"],
                 format_func=lambda x: f"{x.title()}",
             )
 
@@ -105,7 +103,7 @@ def get_mutation_customisation():
                 "Select the number of entity swaps that should be performed",
                 min_value=1,
                 max_value=5,
-                value=1,
+                value=DEFAULT_MUTATION_CUSTOMISATIONS["Entity swap"]["number"],
                 step=1,
             )
             
@@ -120,7 +118,7 @@ def get_mutation_customisation():
             unit_types = st.multiselect(
                 "Select the types of measurements to rewrite",
                 options=["distance", "temperate", "time", "mass / weight", "speed", "area", "data storage"],
-                default=["time"],
+                default=DEFAULT_MUTATION_CUSTOMISATIONS["Unit-conversion rewrite"]["unit_types"],
                 format_func=lambda x: f"{x.title()}",
             )
 
@@ -131,7 +129,7 @@ def get_mutation_customisation():
             handling_choice = st.radio(
                 "Select how to handle URL links",
                 options=["remove", "replace"],
-                index=0,
+                index=["remove", "replace"].index(DEFAULT_MUTATION_CUSTOMISATIONS["Ablate URL links"]["handling_choice"]),
                 format_func=lambda x: "Remove along with surrounding context" if x == "remove" else "Replace with placeholder",
             )
 

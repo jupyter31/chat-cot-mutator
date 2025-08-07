@@ -85,7 +85,7 @@ def get_mutation_messages(mutation_request, customisations=None):
             )
 
         case Mutation.TOPIC_DILUTION:
-            # Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
+            # Topic dilution involves injecting spelling errors, keyboard proximity errors, and visual similarity errors into the chat sample.
             # This is done to add noise to the prompt and the tool content.
 
             return (

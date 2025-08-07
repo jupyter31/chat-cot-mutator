@@ -1,18 +1,33 @@
+from enum import Enum
+
+class Mutation(Enum):
+    SALIENCE_DROP = "Salience drop"
+    CLAIM_ALIGNED_DELETION = "Claim-aligned deletion"
+    TOPIC_DILUTION = "Topic dilution"
+    NEGATED_EVIDENCE_INJECTION = "Negated-evidence injection"
+    DATE_NUMBER_JITTER = "Date / number jitter"
+    PASSAGE_SHUFFLE = "Passage shuffle"
+    ENTITY_SWAP = "Entity swap"
+    DOCUMENT_SNIPPET_CUT_OFF = "Document-snippet cut-off"
+    UNIT_CONVERSION_REWRITE = "Unit-conversion rewrite"
+    ABLATE_URL_LINKS = "Ablate URL links"
+
+
+MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
+
+
 DEFAULT_MUTATION_CUSTOMISATIONS = {
-    "Salience drop": {"number": 1},
-    #"Claim-aligned deletion": None,
-    "Topic dilution": {"level": "high"},
-    #"Negated-evidence injection": None,
-    "Date / number jitter": {"categories": ["date", "number"]},
-    "Passage shuffle": {"preserve_logical_flow": False},
-    "Entity swap": {"entity_types": ["names"], "number": 1},
-    #"Document-snippet cut-off": None,
-    "Unit-conversion rewrite": {"unit_types": ["time"]},
-    "Ablate URL links": {"handling_choice": "remove"},
+    Mutation.SALIENCE_DROP: {"number": 1},
+    # TODO: implement claim-aligned deletion
+    Mutation.TOPIC_DILUTION: {"level": "high"},
+    # TODO: implement negated-evidence injection
+    Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
+    Mutation.PASSAGE_SHUFFLE: {"preserve_logical_flow": False},
+    Mutation.ENTITY_SWAP: {"entity_types": ["names"], "number": 1},
+    # TODO: implement document-snippet cut-off
+    Mutation.UNIT_CONVERSION_REWRITE: {"unit_types": ["time"]},
+    Mutation.ABLATE_URL_LINKS: {"handling_choice": "remove"},
 }
-
-
-MUTATION_OPTIONS = ["Salience drop", "Claim-aligned deletion", "Topic dilution", "Negated-evidence injection", "Date / number jitter", "Passage shuffle", "Entity swap", "Document-snippet cut-off", "Unit-conversion rewrite", "Ablate URL links"]
 
 
 def get_affected_role(mutation_request):
@@ -25,7 +40,7 @@ def get_affected_role(mutation_request):
     Returns:
         str: The role of the messages that will be modified according to the type of mutation.
     """
-    return "user" if mutation_request == "Topic dilution" else "tool"
+    return "user" if mutation_request == Mutation.TOPIC_DILUTION else "tool"
 
 
 def get_mutation_messages(mutation_request, customisations=None):
@@ -46,7 +61,7 @@ def get_mutation_messages(mutation_request, customisations=None):
 
 
     match mutation_request:
-        case "Salience drop":
+        case Mutation.SALIENCE_DROP:
             # Salience drop involves deleting the passage whose tokens have the largest attribution with respect to the answer.
             # This means that we remove passages from the context that have the largest influence on the answer.
 
@@ -73,11 +88,11 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Claim-aligned deletion":
+        case Mutation.CLAIM_ALIGNED_DELETION:
             # TODO
             pass
 
-        case "Topic dilution":
+        case Mutation.TOPIC_DILUTION:
             # Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
             # This is done to add noise to the prompt and the tool content.
 
@@ -101,7 +116,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Negated-evidence injection":
+        case Mutation.NEGATED_EVIDENCE_INJECTION:
             # Negated-evidence injection involves injecting a passage that contradicts the answer.
 
             return (
@@ -126,7 +141,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Date / number jitter":
+        case Mutation.DATE_NUMBER_JITTER:
             # Date / number jitter involves making date-swap and number-swap edits.
 
             customisations["written_categories"] = (" and ").join(customisations["categories"])
@@ -167,7 +182,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Passage shuffle":
+        case Mutation.PASSAGE_SHUFFLE:
             # Passage shuffle randomises the passage order to test position bias.
 
             customisations["preserve"] = "Preserve" if customisations["preserve_logical_flow"] else "Do not preserve"
@@ -196,7 +211,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Entity swap":
+        case Mutation.ENTITY_SWAP:
             # Entity swapping involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
 
             customisations["written_entity_types"] = (", ").join(customisations["entity_types"])
@@ -229,11 +244,11 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Document-snippet cut-off":
+        case Mutation.DOCUMENT_SNIPPET_CUT_OFF:
             # TODO
             pass
 
-        case "Unit-conversion rewrite":
+        case Mutation.UNIT_CONVERSION_REWRITE:
             # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
 
             customisations["written_unit_types"] = (", ").join(customisations["unit_types"])
@@ -270,7 +285,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 }
             )
 
-        case "Ablate URL links":
+        case Mutation.ABLATE_URL_LINKS:
             # Ablate URL links involves removing all URLs from the chat sample.
             # This means that the LLM does not have the the ability to access these information sources.
 

@@ -2,7 +2,7 @@ import json
 import streamlit as st
 
 from chat_dsat_mutator_controller import run_full_process
-from components.mutation_request import edit_mutation_messages, get_mutation_request, init_mutation_customisations
+from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
 
@@ -85,7 +85,7 @@ st.write("The parameters below were used in the system prompt to generate the ne
 valid_system_prompt = edit_system_prompt()
 
 # enabled submit button if inputs are valid and a mutation request has been provided
-disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
+disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
 submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()

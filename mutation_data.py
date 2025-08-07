@@ -78,8 +78,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "1. Identify the top {number} passage{plural} most directly used or paraphrased in the assistant's reply.\n"
                         "2. Remove only the {number} most salient passage{plural} from the `content` field.\n"
                         "3. Do not remove any object keys.\n"
-                        "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -127,8 +127,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "1. Identify the factual claims or general statements that were used or paraphrased in the assistant's response.\n"
                         "2. Rewrite the `content` field to negate those claims using appropriate negation (e.g., 'X is true' → 'X is not true').\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
-                        "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ),
                 }
             )
@@ -148,10 +148,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 instructions.append("Replace dates with different plausible dates.\n")
             if "number" in customisations["categories"]:
                 instructions.append("Replace numbers with different reasonable values.\n")
-            instructions.extend([
-                "Do not change anything that is not a date or number.\n",
-                "Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-            ])
+            instructions.extend("Do not change anything that is not a date or number.\n")
             customisations["user_message"] = "".join(f"{i+1}. {step}" for i, step in enumerate(instructions))
 
             return (
@@ -169,7 +166,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each message:\n"
                         "{user_message}"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -197,8 +195,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "1. Identify the factual claims or general statements that were used or paraphrased in the assistant's response.\n"
                         "2. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
-                        "4. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -230,8 +228,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "2. Replace {each_of_the} {number} most relevant {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
                         "3. Ensure entity swaps are consistent across all messages.\n"
                         "4. Do not remove any object keys.\n"
-                        "5. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -267,8 +265,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "2. Replace each unit with a different unit of the same type, keeping the numerical value unchanged.\n"
                         "3. Do not modify anything that is not a unit.\n"
                         "4. Do not remove any object keys."
-                        "5. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -301,8 +299,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "For each message:\n"
                         "1. {user_message}\n"
                         "2. Do not remove any object keys.\n"
-                        "3. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
                 }
             )
@@ -326,8 +324,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "For each message:\n"
                         f"1. Apply the following mutation: {mutation_request}\n"
                         "2. Do not remove any object keys.\n"
-                        "3. Return a dictionary mapping each tool message's `referenceNumber` (as a string) to its edited object.\n"
-                        "   Output only the dictionary, formatted as a single line with no indentation or extra commentary."
+                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
+                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ),
                 }
             )

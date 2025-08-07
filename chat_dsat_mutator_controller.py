@@ -217,9 +217,9 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
                         for i, result in enumerate(msg["content"]["results"]):
                             # use the reference number from the result to know which values to replace
-                            reference_number = str(result["referenceNumber"])
-                            if reference_number in response.keys():
-                                msg["content"]["results"][i] = response[reference_number]
+                            reference_id = str(result["reference_id"])
+                            if reference_id in response.keys():
+                                msg["content"]["results"][i] = response[reference_id]
 
                         msg["content"] = json.dumps(msg["content"])
 

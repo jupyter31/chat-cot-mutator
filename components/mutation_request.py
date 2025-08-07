@@ -67,10 +67,6 @@ def get_mutation_customisation():
             )
 
             return {"number": number}
-        
-        case Mutation.CLAIM_ALIGNED_DELETION:
-            # TODO
-            pass
 
         case Mutation.TOPIC_DILUTION:
             st.session_state[f"{mut_str}_level"] = st.session_state[f"{mut_str}_level"]
@@ -129,10 +125,6 @@ def get_mutation_customisation():
             )
 
             return {"entity_types": entity_types, "number": number}
-
-        case Mutation.DOCUMENT_SNIPPET_CUT_OFF:
-            # TODO
-            pass
 
         case Mutation.UNIT_CONVERSION_REWRITE:
             # TODO: enforce at least one selection

@@ -2,13 +2,11 @@ from enum import Enum
 
 class Mutation(Enum):
     SALIENCE_DROP = "Salience drop"
-    CLAIM_ALIGNED_DELETION = "Claim-aligned deletion"
     TOPIC_DILUTION = "Topic dilution"
     NEGATED_EVIDENCE_INJECTION = "Negated-evidence injection"
     DATE_NUMBER_JITTER = "Date / number jitter"
     PASSAGE_SHUFFLE = "Passage shuffle"
     ENTITY_SWAP = "Entity swap"
-    DOCUMENT_SNIPPET_CUT_OFF = "Document-snippet cut-off"
     UNIT_CONVERSION_REWRITE = "Unit-conversion rewrite"
     ABLATE_URL_LINKS = "Ablate URL links"
 
@@ -18,13 +16,11 @@ MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
 
 DEFAULT_MUTATION_CUSTOMISATIONS = {
     Mutation.SALIENCE_DROP: {"number": 1},
-    # TODO: implement claim-aligned deletion
     Mutation.TOPIC_DILUTION: {"level": "high"},
     # TODO: implement negated-evidence injection
     Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
     Mutation.PASSAGE_SHUFFLE: {"preserve_logical_flow": False},
     Mutation.ENTITY_SWAP: {"entity_types": ["names"], "number": 1},
-    # TODO: implement document-snippet cut-off
     Mutation.UNIT_CONVERSION_REWRITE: {"unit_types": ["time"]},
     Mutation.ABLATE_URL_LINKS: {"handling_choice": "remove"},
 }
@@ -87,10 +83,6 @@ def get_mutation_messages(mutation_request, customisations=None):
                     ).format_map(customisations),
                 }
             )
-
-        case Mutation.CLAIM_ALIGNED_DELETION:
-            # TODO
-            pass
 
         case Mutation.TOPIC_DILUTION:
             # Topic dilution involves injecting spelling errors, keyboard procimity errors, and visual similarity errors into the chat sample.
@@ -243,10 +235,6 @@ def get_mutation_messages(mutation_request, customisations=None):
                     ).format_map(customisations),
                 }
             )
-
-        case Mutation.DOCUMENT_SNIPPET_CUT_OFF:
-            # TODO
-            pass
 
         case Mutation.UNIT_CONVERSION_REWRITE:
             # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.

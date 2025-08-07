@@ -1,9 +1,6 @@
 import json
 import streamlit as st
 
-from clients.foundry import foundry_client
-
-
 def click_prev():
     if st.session_state.chat_index > 0:
         st.session_state.chat_index -= 1
@@ -59,14 +56,7 @@ def display_individual_chat_sample_results():
 
         # show differences between original and mutated chat sample
         with tab2:
-            diff_url = foundry_client.save_diff(
-                json.dumps(st.session_state.chat_samples[st.session_state.chat_index], indent=2),
-                json.dumps(st.session_state.mutated_chat_samples[st.session_state.chat_index], indent=2),
-                "Original chat sample", 
-                "Mutated chat sample",
-            )
-
-            st.markdown(f"[Click here to see the mutations using the Copilot Playground Diff Tool]({diff_url})")
+            st.markdown(f"[Click here to see the mutations using the Copilot Playground Diff Tool]({st.session_state.diff_urls[st.session_state.chat_index]})")
             st.write("")
             st.json(st.session_state.differences[st.session_state.chat_index])
 
@@ -81,4 +71,4 @@ def display_individual_chat_sample_results():
                 st.write(st.session_state.new_responses[st.session_state.chat_index])
 
     else:
-        st.error(f"Chat sample {st.session_state.chat_index + 1} failed with error: {st.session_state.errors[st.session_state.chat_index]}")        
+        st.error(f"Chat sample {st.session_state.chat_index + 1} failed with error: {st.session_state.errors[st.session_state.chat_index]}")

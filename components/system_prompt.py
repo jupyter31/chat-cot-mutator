@@ -22,13 +22,13 @@ def init_system_prompt():
 
 
 def edit_system_prompt():
-    with st.expander("Edit system prompt", expanded=True):
+    with st.expander("Edit system prompt", expanded=False):
 
         # reset system prompt params to default values
         if st.button("Reset to default", key="reset_system_prompt"):
             with open(DEFAULT_SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as f:
                 st.session_state.system_prompt = json.load(f)
-                st.session_state.param_key_prefix += 1
+                st.session_state.key_suffix += 1
 
         # allow numerical system prompt parameters to be modified using sliders
         for k, v in st.session_state.slider_params.items():
@@ -39,7 +39,7 @@ def edit_system_prompt():
                 max_value=v["max"],
                 value=st.session_state.system_prompt[k],
                 step=v["step"],
-                key=f"{k}_{st.session_state.param_key_prefix}",
+                key=f"{k}_{st.session_state.key_suffix}",
                 label_visibility="collapsed"
             )
 
@@ -49,7 +49,7 @@ def edit_system_prompt():
             "Stop Sequences",
             value=("\n").join(st.session_state.system_prompt["stop"]),
             placeholder="e.g. '<|im_end|>'",
-            key=f"stop_{st.session_state.param_key_prefix}",
+            key=f"stop_{st.session_state.key_suffix}",
             label_visibility="collapsed"
         ).strip().split("\n")
         
@@ -60,7 +60,7 @@ def edit_system_prompt():
             value=json.dumps(st.session_state.system_prompt["messages"], indent=2),
             height=400,
             disabled=False,
-            key=f"messages_{st.session_state.param_key_prefix}",
+            key=f"messages_{st.session_state.key_suffix}",
             label_visibility="collapsed"
         )
 

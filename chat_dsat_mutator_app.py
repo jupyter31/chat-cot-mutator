@@ -2,7 +2,7 @@ import json
 import streamlit as st
 
 from chat_dsat_mutator_controller import run_full_process
-from components.mutation_request import edit_mutation_messages, get_mutation_request
+from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
 
@@ -20,6 +20,7 @@ init_session_state({
     "chat_index": 0,
     "chat_samples": None,
     "differences": None,
+    "diff_urls": None,
     "errors": {},
     "model": "dev-gpt-4o-gg",
     "mutated_chat_samples": None,
@@ -27,11 +28,13 @@ init_session_state({
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
-    "param_key_prefix": 0,
+    "key_suffix": 0,
     "slider_params": {},
     "show_results": False,
     "system_prompt": {}
 })
+
+init_mutation_customisations()
 
 init_system_prompt()
 
@@ -63,7 +66,7 @@ get_mutation_request()
 valid_mutation_messages = False
 if st.session_state.mutation_request != "":
     # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
-    st.subheader("Mutation messages")
+    st.markdown("##### Mutation messages")
     st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
 
     valid_mutation_messages = edit_mutation_messages()
@@ -82,7 +85,7 @@ st.write("The parameters below were used in the system prompt to generate the ne
 valid_system_prompt = edit_system_prompt()
 
 # enabled submit button if inputs are valid and a mutation request has been provided
-disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request.strip() == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
+disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
 submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()
@@ -90,7 +93,16 @@ if submit:
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.chat_index = 0
-            (st.session_state.mutated_chat_samples, st.session_state.mutation_messages, st.session_state.differences, st.session_state.new_responses, st.session_state.errors) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+
+            (
+                st.session_state.mutated_chat_samples, 
+                st.session_state.mutation_messages, 
+                st.session_state.differences, 
+                st.session_state.diff_urls, 
+                st.session_state.new_responses, 
+                st.session_state.errors
+            ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+            
             st.session_state.show_results = True
         except Exception as e:
             st.error(e)

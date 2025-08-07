@@ -3,6 +3,8 @@ from deepdiff import DeepDiff
 import json
 
 from clients.llm_api import llm_api_client
+from clients.foundry import foundry_client
+
 from mutation_data import get_affected_role, get_mutation_messages
 
 
@@ -21,7 +23,7 @@ def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_response
     Returns:
         list<dict>: The mutated chat samples with the new responses added.
     """
-    for i, chat in enumerate(mutated_chat_samples):
+    for chat, response in zip(mutated_chat_samples, new_responses):
         # remove original assistant response if it exists
         if chat["messages"][-1]["role"] == "assistant":
             chat["messages"].pop()
@@ -30,7 +32,7 @@ def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_response
         chat["messages"].append(
             {
                 "role": "assistant",
-                "content": new_responses[i],
+                "content": response,
                 "weight": 1
             }
         )
@@ -103,6 +105,27 @@ def get_differences(chat_samples, mutated_chat_samples):
     mutated_chat_samples = copy.deepcopy(mutated_chat_samples)
 
     return [DeepDiff(parse_embedded_json(chat_sample), parse_embedded_json(mutated_chat_sample), view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
+
+
+def get_diff_urls(chat_samples, mutated_chat_samples):
+    """
+    Returns the URLs of the differences between the original and mutated chat samples.
+
+    Args:
+        chat_samples (list<dict>): The original chat samples.
+        mutated_chat_samples (list<dict>): The mutated chat samples.
+
+    Returns:
+        list<str>: The URLs of the differences between the original and mutated chat samples.
+    """
+    return [ 
+        foundry_client.save_diff(
+            json.dumps(chat_sample, indent=2),
+            json.dumps(mutated_chat_sample, indent=2),
+            "Original chat sample", 
+            "Mutated chat sample",
+        ) for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)
+    ]
 
 
 def is_json_valid(s):
@@ -261,24 +284,28 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
     diff_successes = [i for i, diff in zip(mut_successes, raw_differences) if diff != {}]
     errors.update({i: "No differences were found between the original and mutated chat sample." for i, diff in zip(mut_successes, raw_differences) if diff == {}})
 
+
     raw_responses = generate_responses(model, system_prompt, [raw_mutated_chat_samples[i] for i in diff_successes])
     res_successes = [i for i, response in zip(diff_successes, raw_responses) if response is not None]
     errors.update({i: f"Response generation failed after {MAX_RETRY} attempts." for i, response in zip(diff_successes, raw_responses) if response is None})
 
     raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[diff_successes.index(i)] for i in res_successes])
+    raw_diff_urls = get_diff_urls([chat_samples[i] for i in mut_successes], [raw_mutated_chat_samples[diff_successes.index(i)] for i in mut_successes])
 
     mutated_chat_samples = [None] * len(chat_samples)
     differences = [None] * len(chat_samples)
+    diff_urls = [None] * len(chat_samples)
     responses = [None] * len(chat_samples)
 
     for i in res_successes:
         mutated_chat_samples[i] = raw_mutated_chat_samples[diff_successes.index(i)]
 
-        diff = raw_differences[mut_successes.index(i)]
+        diff, diff_url = raw_differences[mut_successes.index(i)], raw_diff_urls[mut_successes.index(i)]
         differences[i] = diff if diff else None
+        diff_urls[i] = diff_url if diff_url else None
 
         responses[i] = raw_responses[diff_successes.index(i)]
 
-    return (mutated_chat_samples, mutation_messages, differences, responses, errors)
+    return (mutated_chat_samples, mutation_messages, differences, diff_urls, responses, errors)
 
 

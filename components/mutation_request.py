@@ -27,7 +27,7 @@ def edit_mutation_messages():
         try:
             st.session_state.mutation_messages = json.loads(modified_mutation_messages)
             return True
-        except json.JSONDecodeError as e:
+        except Exception as e:
             st.error(f"Invalid JSON format in mutation messages: {e}")
             return False
         
@@ -61,7 +61,7 @@ def get_mutation_customisation():
             number = st.slider(
                 "Select the number of salient passages to drop",
                 min_value=1,
-                max_value=5,
+                max_value=10,
                 step=1,
                 key=f"{mut_str}_number"
             )

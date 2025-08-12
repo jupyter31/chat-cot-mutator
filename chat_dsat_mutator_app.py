@@ -1,5 +1,6 @@
 import json
 import streamlit as st
+import time
 
 from chat_dsat_mutator_controller import run_full_process
 from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
@@ -55,7 +56,7 @@ if raw_chat_samples != ['']:
         st.session_state.chat_samples = [json.loads(chat) for chat in raw_chat_samples]
         st.session_state.original_responses = [chat["messages"][-1]["content"] if chat["messages"][-1]["role"] == "assistant" else None for chat in st.session_state.chat_samples]
         valid_chat_samples = True
-    except json.JSONDecodeError as e:
+    except Exception as e:
         st.error(f"Invalid JSON format: {e}")
 
 # get mutation request
@@ -90,6 +91,7 @@ submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()
 if submit:
+    st.session_state.start = time.time()
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.chat_index = 0
@@ -102,6 +104,9 @@ if submit:
                 st.session_state.new_responses, 
                 st.session_state.errors
             ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+
+            st.session_state.end = time.time()
+            print(f"Elapsed time: {st.session_state.end - st.session_state.start} seconds")
             
             st.session_state.show_results = True
         except Exception as e:

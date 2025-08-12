@@ -68,7 +68,7 @@ def edit_system_prompt():
         try:
             st.session_state.system_prompt["messages"] = json.loads(modified_system_prompt_messages.strip())
             return True
-        except json.JSONDecodeError as e:
+        except Exception as e:
             st.error(f"Invalid JSON format in system prompt messages: {e}")
             return False
 

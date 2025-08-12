@@ -100,6 +100,7 @@ class FoundryClient:
             f"{_FOUNDRY_BASE_URL}/api/v2/data/diff/save",
             json=diff_data,
             headers=headers,
+            timeout=(180, 180)
         )
         assert (
             response.status_code == 200

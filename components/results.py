@@ -19,8 +19,11 @@ def download_all():
         mime="application/jsonl"
     )
 
-    for k, v in st.session_state.errors.items():
-        st.error(f"Chat sample {k + 1} failed with error: {v}")
+    st.download_button(
+        label="Download error log (.txt)",
+        data="\n".join([f"Chat sample {k + 1} failed with error: {v}"for k, v in sorted(st.session_state.errors.items())]),
+        file_name="errors.txt",
+    )
 
     st.divider()
 

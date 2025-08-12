@@ -53,7 +53,7 @@ class LLMClient:
                 f"Request failed with status code {response.status_code}. Response: {response.text}"
                 )
             
-    def send_batch_chat_request(self, model_name, batch_requests, batch_size=5):
+    def send_batch_chat_request(self, model_name, batch_requests, batch_size=100):
         """
         Sends multiple chat completion requests as a batch to the LLM endpoint.
         
@@ -80,6 +80,7 @@ class LLMClient:
         # Process requests in batches of batch_size
         results = []
         for i in range(0, len(batch_requests), batch_size):
+            print(f"Processing batch {i // batch_size + 1} with {len(batch_requests[i:i+batch_size])} requests")
             current_batch = batch_requests[i:i+batch_size]
             
             # For each request in the batch, ensure it has the required fields
@@ -175,7 +176,7 @@ class LLMClient:
 
                 try:
                     data = json.loads(line_str)
-                except json.JSONDecodeError:
+                except Exception:
                     # Not valid JSON, skip or raise an error
                     print(f"Skipping unparseable line: {line_str}")
                     continue

@@ -23,7 +23,7 @@ init_session_state({
     "differences": None,
     "diff_urls": None,
     "errors": {},
-    "model": "dev-gpt-4o-gg",
+    "model": "dev-gpt-5-chat-jj",
     "mutated_chat_samples": None,
     "mutation_messages": None,
     "mutation_request": None,

@@ -76,7 +76,7 @@ if st.session_state.mutation_request != "":
 st.subheader("Model")
 st.session_state.model = st.text_input(
     "To find more models to use, visit the [LLM API model list](https://substrate.microsoft.net/v2/llmApi/modelList)", 
-    value="dev-gpt-4o-gg"
+    value=st.session_state.model
 )
 
 # expose the system prompt used for generating the new responses

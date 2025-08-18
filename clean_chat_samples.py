@@ -1,10 +1,10 @@
 import json
 
-input_path = "test_data\\combined_control_conversations_with_system.jsonl"
-output_path = "test_data\\trimmed_combined_control_conversations_with_system.jsonl"
+input_path = "test_data\\dp_collated.jsonl"
+output_path = "test_data\\dp_collated_2.jsonl"
 
 with open(input_path, "r", encoding="utf-8") as f:
-    chat_samples = f.read().strip().split("\n")[:1000]
+    chat_samples = f.read().strip().split("\n")[100:200]
 
 with open(output_path, "w", encoding="utf-8") as out_file:
     for i,sample in enumerate(chat_samples):

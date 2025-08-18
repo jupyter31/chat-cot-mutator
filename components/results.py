@@ -13,10 +13,16 @@ def click_next():
 
 def download_all():
     st.download_button(
-        label="Download ALL mutated chat samples (.jsonl)",
+        label="Download all mutated chat samples (.jsonl)",
         data="\n".join([json.dumps(chat) for chat in st.session_state.mutated_chat_samples]),
         file_name="mutated_chat_samples.jsonl",
         mime="application/jsonl"
+    )
+
+    st.download_button(
+        label="Download all Diff Tool URLs (.txt)",
+        data="\n".join(["null" if url is None else url for url in st.session_state.diff_urls]),
+        file_name="diff_urls.txt",
     )
 
     st.download_button(

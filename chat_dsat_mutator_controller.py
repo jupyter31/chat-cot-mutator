@@ -67,26 +67,24 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    response_contents = [r["choices"][0]["message"]["content"] for r in responses]
 
     # retry response generation for any responses that are None
     retry = MAX_RETRY
     while retry > 0:
-        failed_indices = [i for i, r in enumerate(response_contents) if r is None]
+        failed_indices = [i for i, r in enumerate(responses) if r is None]
         if not failed_indices:
             break
 
         retry_requests = [requests[i] for i in failed_indices]
         retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
-        retry_response_contents = [r["choices"][0]["message"]["content"] for r in retry_responses]
 
-        for i, retry_response in enumerate(retry_response_contents):
+        for i, retry_response in enumerate(retry_responses):
             if retry_response is not None:
-                response_contents[failed_indices[i]] = retry_response
+                responses[failed_indices[i]] = retry_response
         
         retry -= 1
 
-    return response_contents
+    return responses
 
 
 def get_differences(chat_samples, mutated_chat_samples):
@@ -177,14 +175,13 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    response_contents = [r["choices"][0]["message"]["content"] for r in responses]
 
     affected_role = get_affected_role(mutation_request)
 
     mutated_chat_samples = []
     if affected_role == "user":
         # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples, response_contents):
+        for chat, response in zip(chat_samples, responses):
             for msg in chat["messages"]:
                 if msg["role"] == affected_role:
                     msg["content"] = response
@@ -195,22 +192,21 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
         # retry performing mutations for any responses that are not valid JSON
         retry = MAX_RETRY
         while retry > 0:   
-            failed_indices = [i for i, r in enumerate(response_contents) if not is_json_valid(r)]
+            failed_indices = [i for i, r in enumerate(responses) if not is_json_valid(r)]
             if not failed_indices:
                 break
 
             retry_requests = [requests[i] for i in failed_indices]
             retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
-            retry_response_contents = [r["choices"][0]["message"]["content"] for r in retry_responses]
 
-            for i, retry_response in zip(failed_indices, retry_response_contents):
+            for i, retry_response in zip(failed_indices, retry_responses):
                 if is_json_valid(retry_response):
-                    response_contents[i] = json.loads(retry_response)
+                    responses[i] = json.loads(retry_response)
 
             retry -= 1
 
         # replace content of tool messages with mutated content
-        for i, (chat, response) in enumerate(zip(chat_samples, response_contents)):
+        for i, (chat, response) in enumerate(zip(chat_samples, responses)):
             try:
                 response = json.loads(response)
                 for msg in chat["messages"]:

@@ -1,6 +1,6 @@
 import argparse
 import time
-
+import math
 from msal import PublicClientApplication
 import json
 import requests
@@ -53,7 +53,7 @@ class LLMClient:
                 f"Request failed with status code {response.status_code}. Response: {response.text}"
                 )
             
-    def send_batch_chat_request(self, model_name, batch_requests, batch_size=100):
+    def send_batch_chat_request(self, model_name, batch_requests, batch_size=10):
         """
         Sends multiple chat completion requests as a batch to the LLM endpoint.
         
@@ -66,22 +66,27 @@ class LLMClient:
         Returns:
             list: A list of response objects, one for each request in the batch
         """
-        # Get the token
-        token = self._get_token()
-
-        # Populate the headers
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token,
-            "X-ModelType": model_name,
-            "X-ScenarioGuid": "7a170a7f-3448-4fa6-9de1-57a235b71dbe",
-        }
         
         # Process requests in batches of batch_size
         results = []
+        total_batches = math.ceil(len(batch_requests) / batch_size)
         for i in range(0, len(batch_requests), batch_size):
-            print(f"Processing batch {i // batch_size + 1} with {len(batch_requests[i:i+batch_size])} requests")
+
+            print(f"Processing batch {i // batch_size + 1} / {total_batches} with {len(batch_requests[i:i+batch_size])} requests")
+            start_time = time.time()
             current_batch = batch_requests[i:i+batch_size]
+
+            # Get the token
+            token = self._get_token()
+
+            # Populate the headers
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token,
+                "X-ModelType": model_name,
+                "X-ScenarioGuid": "7a170a7f-3448-4fa6-9de1-57a235b71dbe",
+            }
+            
             
             # For each request in the batch, ensure it has the required fields
             for req in current_batch:
@@ -118,11 +123,16 @@ class LLMClient:
             # Add batch responses to results
             results.extend(batch_responses)
 
+            end_time = time.time()
+            print(f" --> Batch {i // batch_size + 1} processed in {end_time - start_time:.2f} seconds")
+
             # Sleep briefly between batches to avoid rate limiting
             if i + batch_size < len(batch_requests):
                 time.sleep(1)
+
+        result_contents = [r["choices"][0]["message"]["content"] for r in results]
                 
-        return results
+        return result_contents
 
     def send_stream_chat_completion_request(self, model_name, request_data):
         """

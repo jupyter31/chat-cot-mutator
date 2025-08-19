@@ -175,6 +175,9 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
+    
+    decoder = json.JSONDecoder()
+    responses = [json.dumps(decoder.raw_decode(r)[0]) if r else None for r in responses]
 
     affected_role = get_affected_role(mutation_request)
 
@@ -198,6 +201,9 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
             retry_requests = [requests[i] for i in failed_indices]
             retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+
+            decoder = json.JSONDecoder()
+            retry_responses = [json.dumps(decoder.raw_decode(r)[0]) if r else None for r in retry_responses]
 
             for i, retry_response in zip(failed_indices, retry_responses):
                 if is_json_valid(retry_response):

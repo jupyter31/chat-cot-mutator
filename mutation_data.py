@@ -15,7 +15,7 @@ MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
 
 
 DEFAULT_MUTATION_CUSTOMISATIONS = {
-    Mutation.SALIENCE_DROP: {"number": 5},
+    Mutation.SALIENCE_DROP: {"number": 10},
     Mutation.TOPIC_DILUTION: {"level": "high"},
     # TODO: implement negated-evidence injection
     Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
@@ -207,27 +207,27 @@ def get_mutation_messages(mutation_request, customisations=None):
             customisations["written_entity_types"] = (", ").join(customisations["entity_types"])
 
             customisations["entity_plural"] = "entities" if customisations["number"] > 1 else "entity"
-            customisations["each_of_the"] = "each of the" if customisations["number"] > 1 else "the"
 
             return (
                 {
                     "role": "system",
                     "content": (
                         "Your task is to perform entity swapping on tool-generated content.\n"
-                        "- Replace only entities of the following types with other entities of the same type: {written_entity_types}.\n"
+                        "- Only swap entities of type: {written_entity_types}. A swap involves replacing an entity with another entity of the same type, and vice versa.\n"
                         "- Use only entities that have already appeared in the conversation.\n"
-                        "- Ensure consistency of swaps across all messages."
+                        "- Ensure bidirectional consistency (e.g., if 'Alice' is swapped with 'Bob', also swap 'Bob' with 'Alice').\n"
+                        "- Ensure consistency of swaps across all messages (e.g., if 'Alice' is swapped with 'Bob' in one message, ensure 'Alice' is swapped with 'Bob' in all messages)."
                     ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
-                        "Then:\n"
-                        "1. Identify entities ({written_entity_types}) relevant to the original user message and assistant response.\n"
-                        "2. Replace {each_of_the} {number} most relevant {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
-                        "3. Ensure entity swaps are consistent across all messages.\n"
-                        "4. Do not remove any object keys.\n"
+                        "Identify the {number} most relevant {entity_plural} ({written_entity_types}) relevant to the original user message and assistant response.\n"
+                        "For each object in the `results` array of each message:\n"
+                        "1. Swap the identified {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
+                        "2. Ensure entity swaps are consistent across all messages.\n"
+                        "3. Do not remove any object keys.\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),

@@ -1,8 +1,8 @@
+import httpx
 from pathlib import Path
 import time
 from typing import NamedTuple
 import uuid
-import httpx
 
 _USER_OID = "19b50cd6-7371-420f-b506-6c3bc9c02f4a"  # dmstrati
 _TENANT_ID = "72f988bf-86f1-41af-91ab-2d7cd011db47"

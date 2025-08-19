@@ -115,8 +115,12 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "system",
                     "content": (
-                        "Your task is to rewrite tool-generated content by negating key factual claims while preserving correct grammar.\n"
-                        "Do not alter entity names, file names, references, or object keys."
+                        "Your task is to rewrite tool-generated content by negating contextual statements.\n"
+                        "- Preserve correct grammar.\n"
+                        "- Do not delete or omit any part of the original content.\n"
+                        "- Do not alter entity names, file names, references, or object keys.\n"
+                        "- Do not remove any metadata.\n"
+                        "- Only modify the main content of each result object."
                     ),
                 },
                 {
@@ -124,8 +128,8 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "content": (
                         "From our conversation, locate all tool-generated messages containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Identify the factual claims or general statements that were used or paraphrased in the assistant's response.\n"
-                        "2. Rewrite the `content` field to negate those claims using appropriate negation (e.g., 'X is true' → 'X is not true').\n"
+                        "1. Identify the statements that were used or paraphrased in the assistant's response.\n"
+                        "2. Rewrite those statements to negate them (e.g., 'X is true' → 'X is not true').\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."

@@ -63,7 +63,7 @@ class FoundryClient:
         self.client = httpx.Client(timeout=timeout)
 
     def _get_token(self) -> str:  
-        with open(Path(__file__).parent.parent / "launchpad_token.txt") as f:
+        with open(Path(__file__).parent.parent / "foundry_token.txt") as f:
             return f.read().strip()
 
     def save_diff(

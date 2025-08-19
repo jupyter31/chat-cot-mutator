@@ -45,7 +45,7 @@ st.header("Synthetic Chat-Data Mutation Framework")
 st.subheader("Chat samples")
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
-uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"])
+uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"], on_change=lambda: st.session_state.update({"chat_index": 0, "show_results": False}))
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
 
 # validate chat samples

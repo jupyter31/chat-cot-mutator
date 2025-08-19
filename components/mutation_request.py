@@ -33,7 +33,7 @@ def edit_mutation_messages():
         
 
 def get_mutation_request():
-    mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_MAPPING.keys(), format_func=lambda x:MUTATION_MAPPING[x], accept_new_options=False, index=None)
+    mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_MAPPING.keys(), format_func=lambda x:MUTATION_MAPPING[x], accept_new_options=False, index=None, on_change=lambda: st.session_state.update({"chat_index": 0, "show_results": False}))
     st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
 
     # reset customisations and mutation messages to default values

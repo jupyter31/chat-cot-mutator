@@ -27,18 +27,6 @@
   pip install -r requirements.txt
   ```
 
-## Set up Foundry token
-Your Foundry token is needed to generate a link to the Copilot Playgound Diff Tool, where you will be able to compare the original and mutated chat samples.
-- Go to the [Copilot Playground Diff Tool](https://m365playground.prod.substrateai.microsoft.net/diffTool).
-- Navigate to developer tools (Ctrl+Shift+I).
-- Click on the `Network` tab.
-- Click the 'Create a sharable link to this diff' button at the top left of the page.
-![app-display](./images/share-button.png)
-- Open the request for `save` on the `Network` tab.
-![app-display](./images/network-save.png)
-- Copy the token for the `Authorization` request header, after the word 'Bearer'.
-- Create a file in the root of the repository called `foundry_token.txt` and paste the token here.
-
 ## Run the Streamlit app
 To run the Streamlit app, enter the following command:
 

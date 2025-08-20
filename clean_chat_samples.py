@@ -1,13 +1,22 @@
 import json
+import random
 
-input_path = "test_data\\dp_collated.jsonl"
-output_path = "test_data\\dp_collated_2.jsonl"
+INPUT_PATH = "test_data\\official\\dp_collated.jsonl"
+OUTPUT_PATH = "test_data\\\\official\\dp_sample_500.jsonl"
 
-with open(input_path, "r", encoding="utf-8") as f:
-    chat_samples = f.read().strip().split("\n")[100:200]
+SAMPLE_SIZE = 500
 
-with open(output_path, "w", encoding="utf-8") as out_file:
-    for i,sample in enumerate(chat_samples):
+with open(INPUT_PATH, "r", encoding="utf-8") as f:
+    chat_samples = f.read().strip().split("\n")
+    upper_limit = len(chat_samples)
+
+random_indices = sorted(random.sample(range(0, upper_limit), SAMPLE_SIZE))
+print(random_indices)
+
+random_samples = [chat_samples[i] for i in random_indices]
+
+with open(OUTPUT_PATH, "w", encoding="utf-8") as out_file:
+    for idx,sample in enumerate(random_samples):
         try:
             json_sample = json.loads(sample)
 
@@ -38,6 +47,6 @@ with open(output_path, "w", encoding="utf-8") as out_file:
             out_file.write(json.dumps(json_sample) + "\n")
 
         except json.JSONDecodeError as e:
-            print(i)
+            print(idx)
             print(f"Error decoding JSON: {e}")
             continue

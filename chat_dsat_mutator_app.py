@@ -3,6 +3,7 @@ import streamlit as st
 import time
 
 from chat_dsat_mutator_controller import run_full_process
+from components.diff_urls import get_diff_urls
 from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
@@ -15,7 +16,7 @@ def init_session_state(default_states):
             st.session_state[state] = default
 
 
-st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":robot_face:")
+st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":nerd_face:")
            
 init_session_state({
     "chat_index": 0,
@@ -31,6 +32,7 @@ init_session_state({
     "original_responses": None,
     "key_suffix": 0,
     "slider_params": {},
+    "show_diff_urls": False,
     "show_results": False,
     "system_prompt": {}
 })
@@ -45,7 +47,7 @@ st.header("Synthetic Chat-Data Mutation Framework")
 st.subheader("Chat samples")
 st.write(":blue-background[Please ensure that input chat samples are in a valid JSONL format, with each line being a valid JSON object.]")
 
-uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"], on_change=lambda: st.session_state.update({"chat_index": 0, "show_results": False}))
+uploaded_file = st.file_uploader("Upload a JSONL file of chat samples", type=["jsonl"], on_change=lambda: st.session_state.update({"chat_index": 0}))
 raw_chat_samples = uploaded_file.read().decode("utf-8").strip().split("\n") if (uploaded_file is not None) else st.text_area("Paste chat samples here", height=170).strip().split("\n")
 
 # validate chat samples
@@ -100,7 +102,6 @@ if submit:
                 st.session_state.mutated_chat_samples, 
                 st.session_state.mutation_messages, 
                 st.session_state.differences, 
-                st.session_state.diff_urls, 
                 st.session_state.new_responses, 
                 st.session_state.errors
             ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
@@ -118,6 +119,10 @@ if st.session_state.show_results:
     st.subheader("Mutated chat samples")
     
     download_all()
+
+    # generate and display URLs for Copilot Playground Diff Tool
+    st.subheader("Generate 'Diff Tool' URLs")
+    get_diff_urls()
 
     # define buttons for navigating through the individual chat samples
     st.subheader("Individual chat sample results")

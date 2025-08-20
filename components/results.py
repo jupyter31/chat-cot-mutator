@@ -20,12 +20,6 @@ def download_all():
     )
 
     st.download_button(
-        label="Download all Diff Tool URLs (.txt)",
-        data="\n".join(["null" if url is None else url for url in st.session_state.diff_urls]),
-        file_name="diff_urls.txt",
-    )
-
-    st.download_button(
         label="Download error log (.txt)",
         data="\n".join([f"Chat sample {k + 1} failed with error: {v}"for k, v in sorted(st.session_state.errors.items())]),
         file_name="errors.txt",
@@ -65,8 +59,6 @@ def display_individual_chat_sample_results():
 
         # show differences between original and mutated chat sample
         with tab2:
-            st.markdown(f"[Click here to see the mutations using the Copilot Playground Diff Tool]({st.session_state.diff_urls[st.session_state.chat_index]})")
-            st.write("")
             st.json(st.session_state.differences[st.session_state.chat_index])
 
         # display original response and new response

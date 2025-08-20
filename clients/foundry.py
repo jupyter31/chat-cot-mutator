@@ -62,12 +62,9 @@ class FoundryClient:
         timeout = httpx.Timeout(connect=10.0, read=10.0, write=10.0, pool=10.0)
         self.client = httpx.Client(timeout=timeout)
 
-    def _get_token(self) -> str:  
-        with open(Path(__file__).parent.parent / "foundry_token.txt") as f:
-            return f.read().strip()
-
     def save_diff(
         self,
+        token: str,
         control: str,
         treatment: str,
         control_label: str,
@@ -88,7 +85,7 @@ class FoundryClient:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._get_token()}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/json",
             "Connection": "keep-alive",
             "Origin": _FOUNDRY_BASE_URL,

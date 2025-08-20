@@ -105,7 +105,7 @@ def get_differences(chat_samples, mutated_chat_samples):
     return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
-def get_diff_urls(chat_samples, mutated_chat_samples):
+def call_foundry_client(foundry_token, chat_samples, mutated_chat_samples):
     """
     Returns the URLs of the differences between the original and mutated chat samples.
 
@@ -119,6 +119,7 @@ def get_diff_urls(chat_samples, mutated_chat_samples):
     diff_urls = []
     for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples):
         diff_url = foundry_client.save_diff(
+            foundry_token,
             json.dumps(chat_sample, indent=2),
             json.dumps(mutated_chat_sample, indent=2),
             "Original chat sample", 
@@ -144,6 +145,29 @@ def is_json_valid(s):
         return True
     except:
         return False
+    
+def get_safe_responses(responses):
+    """
+    The main cause of errors from LLM responses is the inclusion of an extra trailing curly bracket.
+    This aim of this function is the remove extraneous data at the end of JSON objects, if present.
+
+    Args:
+        responses (list<str>): The responses to check.
+
+    Returns:
+        list<str>: A list of safe responses.
+    """
+    decoder = json.JSONDecoder()
+    safe_responses = []
+
+    for r in responses:
+        try:
+            decoded = decoder.raw_decode(r)[0] if r else None
+            safe_responses.append(json.dumps(decoded))
+        except:
+            safe_responses.append(None)
+
+    return safe_responses
 
 
 def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages=None):
@@ -175,16 +199,14 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    
-    decoder = json.JSONDecoder()
-    responses = [json.dumps(decoder.raw_decode(r)[0]) if r else None for r in responses]
+    safe_responses = get_safe_responses(responses)
 
     affected_role = get_affected_role(mutation_request)
 
     mutated_chat_samples = []
     if affected_role == "user":
         # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples, responses):
+        for chat, response in zip(chat_samples, safe_responses):
             for msg in chat["messages"]:
                 if msg["role"] == affected_role:
                     msg["content"] = response
@@ -195,24 +217,22 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
         # retry performing mutations for any responses that are not valid JSON
         retry = MAX_RETRY
         while retry > 0:   
-            failed_indices = [i for i, r in enumerate(responses) if not is_json_valid(r)]
+            failed_indices = [i for i, r in enumerate(safe_responses) if not is_json_valid(r)]
             if not failed_indices:
                 break
 
             retry_requests = [requests[i] for i in failed_indices]
             retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+            safe_retry_resposes = get_safe_responses(retry_responses)
 
-            decoder = json.JSONDecoder()
-            retry_responses = [json.dumps(decoder.raw_decode(r)[0]) if r else None for r in retry_responses]
-
-            for i, retry_response in zip(failed_indices, retry_responses):
+            for i, retry_response in zip(failed_indices, safe_retry_resposes):
                 if is_json_valid(retry_response):
-                    responses[i] = json.loads(retry_response)
+                    safe_responses[i] = json.loads(retry_response)
 
             retry -= 1
 
         # replace content of tool messages with mutated content
-        for i, (chat, response) in enumerate(zip(chat_samples, responses)):
+        for i, (chat, response) in enumerate(zip(chat_samples, safe_responses)):
             try:
                 response = json.loads(response)
                 for msg in chat["messages"]:
@@ -272,19 +292,15 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
 
     raw_mutated_chat_samples = add_new_responses_to_mutated_chat_samples([raw_mutated_chat_samples[i] for i in res_successes], [raw_responses[diff_successes.index(i)] for i in res_successes])
 
-    raw_diff_urls = get_diff_urls([chat_samples[i] for i in res_successes], raw_mutated_chat_samples)
-
     mutated_chat_samples = [None] * len(chat_samples)
     differences = [None] * len(chat_samples)
-    diff_urls = [None] * len(chat_samples)
     responses = [None] * len(chat_samples)
 
     for i in res_successes:
         mutated_chat_samples[i] = raw_mutated_chat_samples[res_successes.index(i)]
         differences[i] = raw_differences[mut_successes.index(i)]
-        diff_urls[i] = raw_diff_urls[res_successes.index(i)]
         responses[i] = raw_responses[diff_successes.index(i)]
 
-    return (mutated_chat_samples, mutation_messages, differences, diff_urls, responses, errors)
+    return (mutated_chat_samples, mutation_messages, differences, responses, errors)
 
 

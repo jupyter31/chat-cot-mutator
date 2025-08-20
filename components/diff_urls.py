@@ -28,7 +28,7 @@ def get_diff_urls():
             raw_diff_urls = call_foundry_client(
                 foundry_token,
                 [chat for chat, mut in zip(st.session_state.chat_samples, st.session_state.mutated_chat_samples) if mut],
-                st.session_state.mutated_chat_samples
+                [mut for mut in st.session_state.mutated_chat_samples if mut]
             )
 
             st.session_state.diff_urls = [raw_diff_urls.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]

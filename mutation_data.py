@@ -67,16 +67,16 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "system",
                     "content": (
-                        "Your task is to process tool-generated messages and extract the most influential content{plural} used in assistant responses. You do not add any extra content."
+                        "Your task is to process tool-generated messages and extract the most influential content that is used in the assistant response. You do not add any extra content."
                     ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Identify the **{number} passage{plural}** most directly used to inform the assistant's reply.\n"
-                        "2. Remove these passage{plural}** from the object values, but preserve the object keys.\n"
+                        "1. Identify the **{number} most relevant passage{plural}** based on its contextual importance to the original user message and assistant response.\n"
+                        "2. Remove **only the identified passage{plural}** from the object values, and no other passages.\n"
                         "3. Do not remove any object keys.\n"
                         "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
@@ -126,7 +126,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Identify the statements that were used or paraphrased in the assistant's response.\n"
                         "2. Rewrite those statements to negate them (e.g., 'X is true' → 'X is not true').\n"
@@ -170,7 +170,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "{user_message}"
                         "Then:\n"
@@ -198,7 +198,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
                         "2. Do not delete any content.\n"
@@ -231,7 +231,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "\tFor each type of entity ({written_entity_types}):\n"
                         "\t1. Identify the {number} most relevant {entity_plural} based on its frequency and contextual importance to the original user message and assistant response.\n"
@@ -271,7 +271,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Locate any units of measurement that pertain to {written_unit_types}.\n"
                         "2. Replace each unit with a different unit of the same type, keeping the numerical value unchanged.\n"
@@ -308,7 +308,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. {user_message}\n"
                         "2. Do not remove any object keys.\n"
@@ -334,7 +334,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
+                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         f"1. Apply the following mutation: {mutation_request}\n"
                         "2. Do not remove any object keys.\n"

@@ -99,12 +99,15 @@ class FoundryClient:
             headers=headers,
             timeout=(180, 180)
         )
-        assert (
-            response.status_code == 200
-        ), f"Failed to save diff: {response.status_code} - {response.text}"
+
+        if response.status_code != 200:
+            if response.status_code == 401:
+                raise Exception("Your token may have expired. Please refresh it and try again.")
+            else:
+                raise Exception(f"Failed to save diff: {response.status_code} - {response.text}")
 
         final_diff_url = self.get_diff_url(diff_guid)
-        #print(f"Diff saved: {final_diff_url}")
+
         return final_diff_url
 
     def get_diff_url(self, diff_guid: str) -> str:

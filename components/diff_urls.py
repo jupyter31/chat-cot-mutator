@@ -25,15 +25,21 @@ def get_diff_urls():
         with st.spinner("Generating URLs..."):
             st.session_state.diff_urls = []
 
-            raw_diff_urls = call_foundry_client(
-                foundry_token,
-                [chat for chat, mut in zip(st.session_state.chat_samples, st.session_state.mutated_chat_samples) if mut],
-                [mut for mut in st.session_state.mutated_chat_samples if mut]
-            )
+            try:
+                raw_diff_urls = call_foundry_client(
+                    foundry_token,
+                    [chat for chat, mut in zip(st.session_state.chat_samples, st.session_state.mutated_chat_samples) if mut],
+                    [mut for mut in st.session_state.mutated_chat_samples if mut]
+                )
 
-            st.session_state.diff_urls = [raw_diff_urls.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]
+                st.session_state.diff_urls = [raw_diff_urls.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]
 
-            st.session_state.show_diff_urls = True
+                st.session_state.show_diff_urls = True
+
+            except Exception as e:
+                st.error(f"Error generating URLs: {e}")
+                st.session_state.diff_urls = []
+                return
 
     if st.session_state.show_diff_urls:
 

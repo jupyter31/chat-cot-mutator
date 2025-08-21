@@ -67,7 +67,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "system",
                     "content": (
-                        "Your task is to process tool-generated messages and extract the most influential content{plural} used in assistant responses."
+                        "Your task is to process tool-generated messages and extract the most influential content{plural} used in assistant responses. You do not add any extra content."
                     ).format_map(customisations),
                 },
                 {
@@ -75,10 +75,9 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "content": (
                         "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Identify the {number} passage{plural} most directly used to inform the assistant's reply.\n"
-                        "2. Remove these passage{plural} from the main content of the object, but preserve the object keys.\n"
-                        "3. Do not insert placeholders when removing passages.\n"
-                        "4. Do not remove any object keys or metadata (such as IDs).\n"
+                        "1. Identify the **{number} passage{plural}** most directly used to inform the assistant's reply.\n"
+                        "2. Remove these passage{plural}** from the object values, but preserve the object keys.\n"
+                        "3. Do not remove any object keys.\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),

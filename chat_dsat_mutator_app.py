@@ -97,6 +97,8 @@ if submit:
     with st.spinner("Mutating chat samples..."):
         try:
             st.session_state.chat_index = 0
+            st.session_state.show_results = False
+            st.session_state.show_diff_urls = False
 
             (
                 st.session_state.mutated_chat_samples, 
@@ -121,7 +123,7 @@ if st.session_state.show_results:
     download_all()
 
     # generate and display URLs for Copilot Playground Diff Tool
-    st.subheader("Generate 'Diff Tool' URLs")
+    st.subheader("Generate Diff Tool URLs")
     get_diff_urls()
 
     # define buttons for navigating through the individual chat samples

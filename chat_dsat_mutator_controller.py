@@ -5,7 +5,7 @@ import json
 from clients.foundry import foundry_client
 from clients.llm_api import llm_api_client
 
-from mutation_data import get_affected_role, get_mutation_messages
+from mutation_data import Mutation, get_affected_role, get_mutation_messages
 
 
 # maximum number of times that the mutation / response generation process will be retried
@@ -199,14 +199,15 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    safe_responses = get_safe_responses(responses)
+    if mutation_request != Mutation.TOPIC_DILUTION:
+        safe_responses = get_safe_responses(responses)
 
     affected_role = get_affected_role(mutation_request)
 
     mutated_chat_samples = []
     if affected_role == "user":
         # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples, safe_responses):
+        for chat, response in zip(chat_samples, responses):
             for msg in chat["messages"]:
                 if msg["role"] == affected_role:
                     msg["content"] = response

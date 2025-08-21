@@ -78,6 +78,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "1. Identify the **{number} passage{plural}** most directly used to inform the assistant's reply.\n"
                         "2. Remove these passage{plural}** from the object values, but preserve the object keys.\n"
                         "3. Do not remove any object keys.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -117,8 +118,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "content": (
                         "Your task is to rewrite tool-generated content by negating contextual statements.\n"
                         "- Preserve correct grammar.\n"
-                        "- Do not delete or omit any part of the original content.\n"
-                        "- Do not alter entity names, file names, references, or object keys.\n"
+                        "- Do not edit entity names, file names, references, or object keys.\n"
                         "- Do not remove any metadata.\n"
                         "- Only modify the main content of each result object."
                     ),
@@ -126,11 +126,14 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Identify the statements that were used or paraphrased in the assistant's response.\n"
                         "2. Rewrite those statements to negate them (e.g., 'X is true' → 'X is not true').\n"
-                        "3. Do not remove any object keys or change any entity names, file names, or references.\n"
+                        "3. Do not negate phrases that include metadata about the fetched resource (e.g. document, file, meeting invite). For example, do not negate phrases like 'Alice invited you to access a file'.\n"
+                        "4. Do not delete any chunks of the content or metadata such as the fields at the end of a tool call result object.\n"
+                        "5. Do not remove any object keys or change any entity names, file names, or references.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ),
@@ -167,9 +170,10 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "{user_message}"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -194,11 +198,12 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Identify the factual claims or general statements that were used or paraphrased in the assistant's response.\n"
-                        "2. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
+                        "1. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
+                        "2. Do not delete any content.\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -217,7 +222,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "role": "system",
                     "content": (
                         "Your task is to perform entity swapping on tool-generated content.\n"
-                        "- Only swap entities of type: {written_entity_types}. A swap involves replacing an entity with another entity of the same type, and vice versa.\n"
+                        "- Only swap the following types of entities: {written_entity_types}.\n"
                         "- Use only entities that have already appeared in the conversation.\n"
                         "- Ensure bidirectional consistency (e.g., if 'Alice' is swapped with 'Bob', also swap 'Bob' with 'Alice').\n"
                         "- Ensure consistency of swaps across all messages (e.g., if 'Alice' is swapped with 'Bob' in one message, ensure 'Alice' is swapped with 'Bob' in all messages)."
@@ -226,12 +231,14 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
-                        "Identify the {number} most relevant {entity_plural} ({written_entity_types}) relevant to the original user message and assistant response.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Swap the identified {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
-                        "2. Ensure entity swaps are consistent across all messages.\n"
-                        "3. Do not remove any object keys.\n"
+                        "\tFor each type of entity ({written_entity_types}):\n"
+                        "\t1. Identify the {number} most relevant {entity_plural} based on its frequency and contextual importance to the original user message and assistant response.\n"
+                        "\t1. Swap the identified {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
+                        "\t2. Ensure entity swaps are consistent across all messages.\n"
+                        "\t3. Do not remove any object keys.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -251,6 +258,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "- Do not perform any mathematical conversions.\n"
                         "- Only replace the unit (e.g., 'kilometers' → 'miles', 'Celsius' → 'Fahrenheit').\n"
                         "- Ensure the replacement unit is appropriate for the quantity type.\n"
+                        "- Do not modify dates."
                         "Examples:\n"
                         "- Original: The distance is 5 kilometers.\n"
                         "  Modified: The distance is 5 miles.\n"
@@ -263,12 +271,13 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Locate any units of measurement that pertain to {written_unit_types}.\n"
                         "2. Replace each unit with a different unit of the same type, keeping the numerical value unchanged.\n"
                         "3. Do not modify anything that is not a unit.\n"
                         "4. Do not remove any object keys."
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -284,7 +293,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                 customisations["user_message"] = "Remove all URLs from the `content` field, and adjust surrounding text to maintain grammatical correctness."
             else:
                 customisations["system_message"] = "- Replace URLs with a placeholder such as '[URL link removed]'."
-                customisations["user_message"] = "1. Replace all URLs in the `content` field with a placeholder such as '[URL link removed]'."
+                customisations["user_message"] = "1. Replace all URLs in the `content` field with a placeholder such as '[link removed]'."
 
             return (
                 {
@@ -299,10 +308,11 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. {user_message}\n"
                         "2. Do not remove any object keys.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ).format_map(customisations),
@@ -324,10 +334,11 @@ def get_mutation_messages(mutation_request, customisations=None):
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, locate all tool-generated messages containing tool call results.\n"
+                        "Analyse all tool-generated messages from our conversation containing tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         f"1. Apply the following mutation: {mutation_request}\n"
                         "2. Do not remove any object keys.\n"
+                        "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
                     ),

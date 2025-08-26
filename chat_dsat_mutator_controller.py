@@ -100,10 +100,10 @@ def get_differences(chat_samples, mutated_chat_samples):
         list<dict>: The differences between the original and mutated chat samples.
     """
     # create copies of the chat samples to avoid modifying the originals
-    chat_samples = copy.deepcopy(chat_samples)
-    mutated_chat_samples = copy.deepcopy(mutated_chat_samples)
+    chat_samples_copy = copy.deepcopy(chat_samples)
+    mutated_chat_samples_copy = copy.deepcopy(mutated_chat_samples)
 
-    return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
+    return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples_copy, mutated_chat_samples_copy)]
 
 
 def get_safe_responses(responses):

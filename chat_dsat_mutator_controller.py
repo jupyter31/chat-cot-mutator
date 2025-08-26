@@ -1,6 +1,7 @@
 import copy
 from deepdiff import DeepDiff
 import json
+import random
 
 from clients.foundry import foundry_client
 from clients.llm_api import llm_api_client
@@ -187,12 +188,25 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
         list<dict>: The messages used to perform the mutations.
     """
     # create a copy of the chat samples to avoid modifying the originals
-    chat_samples = copy.deepcopy(chat_samples)
+    chat_samples_copy = copy.deepcopy(chat_samples)
 
+    # handle the special case of passage shuffle with outer shuffle depth
     if mutation_request == Mutation.PASSAGE_SHUFFLE and customisations.get("shuffle_depth") == "outer":
-        # TODO
-        pass
+        for chat in chat_samples_copy:
+            for message in chat["messages"]:
+                if message["role"] == "tool" and json.loads(message["content"]).get("results") is not None:
+                    content = json.loads(message["content"])
+                    results = content["results"]
+                    random.shuffle(results)
+                    content["results"] = results
+                    message["content"] = json.dumps(content)
 
+        mutated_chat_samples = chat_samples_copy
+        mutation_messages = None
+
+        return (mutated_chat_samples, mutation_messages)
+
+    # handle the more general cases
     requests = []
 
     # get default mutation messages if not provided
@@ -200,7 +214,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
         mutation_messages = list(get_mutation_messages(mutation_request))
 
     # add mutation messages to each chat sample
-    for chat in chat_samples:
+    for chat in chat_samples_copy:
         requests.append({"messages": chat["messages"] + mutation_messages})
 
     # send the requests to the LLM API
@@ -213,7 +227,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
     mutated_chat_samples = []
     if affected_role == "user":
         # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples, responses):
+        for chat, response in zip(chat_samples_copy, responses):
             for msg in chat["messages"]:
                 if msg["role"] == affected_role:
                     msg["content"] = response
@@ -239,7 +253,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
             retry -= 1
 
         # replace content of tool messages with mutated content
-        for i, (chat, response) in enumerate(zip(chat_samples, safe_responses)):
+        for i, (chat, response) in enumerate(zip(chat_samples_copy, safe_responses)):
             try:
                 response = json.loads(response)
                 for msg in chat["messages"]:
@@ -310,5 +324,4 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
         responses[i] = raw_responses[diff_successes.index(i)]
 
     return (mutated_chat_samples, mutation_messages, differences, responses, errors)
-
 

@@ -97,7 +97,7 @@ def get_mutation_customisation():
         
         case Mutation.PASSAGE_SHUFFLE:
             st.session_state[f"{mut_str}_shuffle_depth"] = st.session_state[f"{mut_str}_shuffle_depth"]
-            preserve_logical_flow = st.radio(
+            shuffle_depth = st.radio(
                 "Select whether to perform an 'inner' shuffle (i.e. the passages within the tool call results are shuffled), or an 'outer' shuffle (i.e. the order of the tool call results themselves are shuffled)",
                 options=["inner", "outer"],
                 format_func=lambda x: f"{x.title()} shuffle",
@@ -105,7 +105,7 @@ def get_mutation_customisation():
                 key=f"{mut_str}_shuffle_depth"
             )
 
-            return {"shuffle_depth": "inner"}
+            return {"shuffle_depth": shuffle_depth}
 
         case Mutation.ENTITY_SWAP:
             # TODO: enforce at least one selection

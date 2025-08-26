@@ -2,6 +2,8 @@ import json
 import streamlit as st
 import time
 
+from mutation_data import Mutation
+
 from chat_dsat_mutator_controller import run_full_process
 from components.diff_urls import get_diff_urls
 from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
@@ -69,11 +71,14 @@ get_mutation_request()
 
 valid_mutation_messages = False
 if st.session_state.mutation_request != "":
-    # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
-    st.markdown("##### Mutation messages")
-    st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
+    if (st.session_state.mutation_request == Mutation.PASSAGE_SHUFFLE and st.session_state.customisations.get("shuffle_depth") == "outer"):
+        valid_mutation_messages = True
+    else:
+        # show the messages used to mutate the chat samples and allow it to be modified and resubmitted
+        st.markdown("##### Mutation messages")
+        st.write("The messages below were used to produce the mutations. You can use it to understand how the mutations were generated, or modify the messages and regenerate the mutations.")
 
-    valid_mutation_messages = edit_mutation_messages()
+        valid_mutation_messages = edit_mutation_messages()
 
 # get model to use
 st.subheader("Model")

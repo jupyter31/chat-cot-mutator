@@ -1,7 +1,7 @@
 import json
 import streamlit as st
 
-DEFAULT_SYSTEM_PROMPT_FILE = "system_prompts\\enterprise_copilot.json"
+DEFAULT_SYSTEM_PROMPT_FILE = "prompts\\enterprise_copilot.json"
 
 DEFAULT_SLIDER_PARAMS = {
     "temperature": {"label": "Temperature", "min": 0.0, "max": 2.0, "step": 0.1},

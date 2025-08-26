@@ -75,7 +75,7 @@ def get_mutation_messages(mutation_request, customisations=None):
                         "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
                         "1. Identify and rank the passages (e.g. sentences, bullet points, small paragraphs) based on their contextual importance to the original user message and assistant response.\n"
-                        "2. Select and remove only the top {number} more relevant passage{plural} from the object values. Do not remove any other passages.\n"
+                        "2. Select and remove only the top {number} most relevant passage{plural} from the object values. Do not remove any other passages.\n"
                         "3. Do not remove any object keys.\n"
                         "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"

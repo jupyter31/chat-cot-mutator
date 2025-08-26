@@ -105,6 +105,30 @@ def get_differences(chat_samples, mutated_chat_samples):
     return [DeepDiff(chat_sample, mutated_chat_sample, view="text") for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples)]
 
 
+def get_safe_responses(responses):
+    """
+    The main cause of errors from LLM responses is the inclusion of an extra trailing curly bracket.
+    This aim of this function is the remove extraneous data at the end of JSON objects, if present.
+
+    Args:
+        responses (list<str>): The responses to check.
+
+    Returns:
+        list<str>: A list of safe responses.
+    """
+    decoder = json.JSONDecoder()
+    safe_responses = []
+
+    for r in responses:
+        try:
+            decoded = decoder.raw_decode(r)[0] if r else None
+            safe_responses.append(json.dumps(decoded))
+        except:
+            safe_responses.append(None)
+
+    return safe_responses
+
+
 def call_foundry_client(foundry_token, chat_samples, mutated_chat_samples):
     """
     Returns the URLs of the differences between the original and mutated chat samples.
@@ -145,32 +169,9 @@ def is_json_valid(s):
         return True
     except:
         return False
-    
-def get_safe_responses(responses):
-    """
-    The main cause of errors from LLM responses is the inclusion of an extra trailing curly bracket.
-    This aim of this function is the remove extraneous data at the end of JSON objects, if present.
-
-    Args:
-        responses (list<str>): The responses to check.
-
-    Returns:
-        list<str>: A list of safe responses.
-    """
-    decoder = json.JSONDecoder()
-    safe_responses = []
-
-    for r in responses:
-        try:
-            decoded = decoder.raw_decode(r)[0] if r else None
-            safe_responses.append(json.dumps(decoded))
-        except:
-            safe_responses.append(None)
-
-    return safe_responses
 
 
-def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages=None):
+def mutate_chat_samples(model, chat_samples, mutation_request, customisations, mutation_messages=None):
     """
     Mutates the chat sample based on the mutation request.
 
@@ -178,6 +179,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
         model (str): The model to use for inducing the mutations.
         chat_samples (list<dict>): The original chat samples.
         mutation_request (str): The type of mutation to apply.
+        customisations (dict): The customisations to apply to the mutation.
         mutation_messages (list<dict>, optional): The messages used to perform the mutations.
 
     Returns:
@@ -186,6 +188,10 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
     """
     # create a copy of the chat samples to avoid modifying the originals
     chat_samples = copy.deepcopy(chat_samples)
+
+    if mutation_request == Mutation.PASSAGE_SHUFFLE and customisations.get("shuffle_depth") == "outer":
+        # TODO
+        pass
 
     requests = []
 
@@ -257,7 +263,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages
     return (mutated_chat_samples, mutation_messages)
 
 
-def run_full_process(model, chat_samples, mutation_request, system_prompt, mutation_messages=None):
+def run_full_process(model, chat_samples, mutation_request, customisations, system_prompt, mutation_messages=None):
     """
     Runs the full process of mutating chat samples, computing differences, and generating new responses.
 
@@ -265,6 +271,7 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
         model (str): The model to use for the inducing the mutations and generating the responses.
         chat_samples (list<dict>): The original chat samples.
         mutation_request (str): The type of mutation to apply.
+        customisations (dict): The customisations to apply to the mutation.
         system_prompt (dict): The system prompt to use for generating new responses.
         mutation_messages (list<dict>, optional): The messages used to perform the mutations.
 
@@ -276,7 +283,7 @@ def run_full_process(model, chat_samples, mutation_request, system_prompt, mutat
         list<int>: The indices of the chat samples that failed the mutation process.
     """
     print()
-    raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, mutation_messages)
+    raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, customisations, mutation_messages)
     mut_successes = [i for i, chat in enumerate(raw_mutated_chat_samples) if chat is not None]
     errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}
     print(len(mut_successes), "mutations succeeded out of", len(raw_mutated_chat_samples))

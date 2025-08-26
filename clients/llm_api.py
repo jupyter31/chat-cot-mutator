@@ -52,7 +52,7 @@ class LLMClient:
                 f"Request failed with status code {response.status_code}. Response: {response.text}"
                 )
             
-    def send_batch_chat_request(self, model_name, batch_requests, batch_size=10):
+    def send_batch_chat_request(self, model_name, batch_requests, batch_size=5):
         """
         Sends multiple chat completion requests as a batch to the LLM endpoint.
         

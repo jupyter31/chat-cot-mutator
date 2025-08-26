@@ -45,12 +45,12 @@ def get_mutation_request():
 
         st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request))
 
-    customisations = get_mutation_customisation()
-    st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request, customisations))
+    st.session_state.customisations = get_mutation_customisation()
+    st.session_state.mutation_messages = list(get_mutation_messages(st.session_state.mutation_request, st.session_state.customisations))
 
 
 def get_mutation_customisation():
-    if st.session_state.mutation_request in Mutation:
+    if st.session_state.mutation_request in Mutation and st.session_state.mutation_request != Mutation.NEGATED_EVIDENCE_INJECTION:
         st.markdown("##### Mutation customisations")
         mut_str = (st.session_state.mutation_request).name.lower()
         
@@ -81,8 +81,7 @@ def get_mutation_customisation():
             return {"level": level}
         
         case Mutation.NEGATED_EVIDENCE_INJECTION:
-            # TODO
-            pass
+            return {}
 
         case Mutation.DATE_NUMBER_JITTER:
             # TODO: enforce at least one selection
@@ -97,13 +96,16 @@ def get_mutation_customisation():
             return {"categories": categories}
         
         case Mutation.PASSAGE_SHUFFLE:
-            st.session_state[f"{mut_str}_preserve_logical_flow"] = st.session_state[f"{mut_str}_preserve_logical_flow"]
-            preserve_logical_flow = st.checkbox(
-                "Preserve the logical flow of passages",
-                key=f"{mut_str}_preserve_logical_flow"
+            st.session_state[f"{mut_str}_shuffle_depth"] = st.session_state[f"{mut_str}_shuffle_depth"]
+            preserve_logical_flow = st.radio(
+                "Select whether to perform an 'inner' shuffle (i.e. the passages within the tool call results are shuffled), or an 'outer' shuffle (i.e. the order of the tool call results themselves are shuffled)",
+                options=["inner", "outer"],
+                format_func=lambda x: f"{x.title()} shuffle",
+                horizontal=True,
+                key=f"{mut_str}_shuffle_depth"
             )
 
-            return {"preserve_logical_flow": preserve_logical_flow}
+            return {"shuffle_depth": "inner"}
 
         case Mutation.ENTITY_SWAP:
             # TODO: enforce at least one selection

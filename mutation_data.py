@@ -17,9 +17,8 @@ MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
 DEFAULT_MUTATION_CUSTOMISATIONS = {
     Mutation.SALIENCE_DROP: {"number": 10},
     Mutation.TOPIC_DILUTION: {"level": "high"},
-    # TODO: implement negated-evidence injection
     Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
-    Mutation.PASSAGE_SHUFFLE: {"preserve_logical_flow": False},
+    Mutation.PASSAGE_SHUFFLE: {"shuffle_depth": "inner"},
     Mutation.ENTITY_SWAP: {"entity_types": ["names"], "number": 1},
     Mutation.UNIT_CONVERSION_REWRITE: {"unit_types": ["time"]},
     Mutation.ABLATE_URL_LINKS: {"handling_choice": "remove"},
@@ -68,15 +67,15 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "role": "system",
                     "content": (
                         "Your task is to process tool-generated messages and extract the most influential content that is used in the assistant response. You do not add any extra content."
-                    ).format_map(customisations),
+                    ),
                 },
                 {
                     "role": "user",
                     "content": (
                         "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Identify the **{number} most relevant passage{plural}** based on its contextual importance to the original user message and assistant response.\n"
-                        "2. Remove **only the identified passage{plural}** from the object values, and no other passages.\n"
+                        "1. Identify and rank the passages (e.g. sentences, bullet points, small paragraphs) based on their contextual importance to the original user message and assistant response.\n"
+                        "2. Select and remove only the top {number} more relevant passage{plural} from the object values. Do not remove any other passages.\n"
                         "3. Do not remove any object keys.\n"
                         "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
@@ -183,30 +182,27 @@ def get_mutation_messages(mutation_request, customisations=None):
         case Mutation.PASSAGE_SHUFFLE:
             # Passage shuffle randomises the passage order to test position bias.
 
-            customisations["preserve"] = "Preserve" if customisations["preserve_logical_flow"] else "Do not preserve"
-            customisations["coherent_sense"] = "makes coherent sense" if customisations["preserve_logical_flow"] else "does not make coherent sense"
-
             return (
                 {
                     "role": "system",
                     "content": (
                         "Your task is to randomize and shuffle the order of passages within tool-generated content.\n"
-                        "{preserve} the logical flow of the passages so that the shuffled output {coherent_sense}.\n"
+                        "Do not preserve the logical flow of the passages.\n"
                         "Do not remove any object keys or modify entity names, file names, or references."
-                    ).format_map(customisations),
+                    ),
                 },
                 {
                     "role": "user",
                     "content": (
                         "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
                         "For each object in the `results` array of each message:\n"
-                        "1. Rewrite the `content` field to shuffle the order of the passages. {preserve} the logical flow of passages.\n"
+                        "1. Rewrite the `content` field to shuffle the order of the passages. Do not preserve the logical flow of passages.\n"
                         "2. Do not delete any content.\n"
                         "3. Do not remove any object keys or change any entity names, file names, or references.\n"
                         "Then:\n"
                         "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
                         "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
+                    ),
                 }
             )
 

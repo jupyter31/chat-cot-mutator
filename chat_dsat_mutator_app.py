@@ -21,6 +21,7 @@ st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=
 init_session_state({
     "chat_index": 0,
     "chat_samples": None,
+    "customisations": {},
     "differences": None,
     "diff_urls": None,
     "errors": {},
@@ -106,7 +107,7 @@ if submit:
                 st.session_state.differences, 
                 st.session_state.new_responses, 
                 st.session_state.errors
-            ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.system_prompt, st.session_state.mutation_messages)
+            ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.customisations, st.session_state.system_prompt, st.session_state.mutation_messages)
 
             st.session_state.end = time.time()
             print(f"Elapsed time: {st.session_state.end - st.session_state.start} seconds")

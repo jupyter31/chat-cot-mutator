@@ -19,7 +19,7 @@ def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_response
 
     Args:
         mutated_chat_samples (list<dict>): The mutated chat samples.
-        list<str>: The new responses generated from the mutated chat samples.
+        new_responses (list<str>): The new responses generated from the mutated chat samples.
 
     Returns:
         list<dict>: The mutated chat samples with the new responses added.
@@ -135,6 +135,7 @@ def call_foundry_client(foundry_token, chat_samples, mutated_chat_samples):
     Returns the URLs of the differences between the original and mutated chat samples.
 
     Args:
+        foundry_token (str): The Foundry token to use for authentication.
         chat_samples (list<dict>): The original chat samples.
         mutated_chat_samples (list<dict>): The mutated chat samples.
 

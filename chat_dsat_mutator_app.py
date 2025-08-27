@@ -6,6 +6,7 @@ from mutation_data import Mutation
 
 from chat_dsat_mutator_controller import run_full_process
 from components.diff_urls import get_diff_urls
+from components.judge import run_hallucination_judge
 from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
 from components.results import display_individual_chat_sample_results, download_all
 from components.system_prompt import edit_system_prompt, init_system_prompt
@@ -22,18 +23,19 @@ st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=
            
 init_session_state({
     "chat_index": 0,
+    "chat_model": "dev-gpt-5-chat-jj",
     "chat_samples": None,
     "customisations": {},
     "differences": None,
     "diff_urls": None,
     "errors": {},
-    "model": "dev-gpt-5-chat-jj",
+    "key_suffix": 0,
     "mutated_chat_samples": None,
     "mutation_messages": None,
     "mutation_request": None,
     "new_responses": None,
     "original_responses": None,
-    "key_suffix": 0,
+    "reasoning_model": "dev-gpt-5-reasoning",
     "slider_params": {},
     "show_diff_urls": False,
     "show_results": False,
@@ -80,11 +82,12 @@ if st.session_state.mutation_request != "":
 
         valid_mutation_messages = edit_mutation_messages()
 
-# get model to use
-st.subheader("Model")
-st.session_state.model = st.text_input(
+# get chat model to use
+st.subheader("Chat model")
+st.write("The chat model will be used to perform the mutations and generate the new responses.")
+st.session_state.chat_model = st.text_input(
     "To find more models to use, visit the [LLM API model list](https://substrate.microsoft.net/v2/llmApi/modelList)", 
-    value=st.session_state.model
+    value=st.session_state.chat_model
 )
 
 # expose the system prompt used for generating the new responses
@@ -94,7 +97,7 @@ st.write("The parameters below were used in the system prompt to generate the ne
 valid_system_prompt = edit_system_prompt()
 
 # enabled submit button if inputs are valid and a mutation request has been provided
-disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request == "") or (not valid_mutation_messages) or (st.session_state.model.strip() == "") or (not valid_system_prompt)
+disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request == "") or (not valid_mutation_messages) or (st.session_state.chat_model.strip() == "") or (not valid_system_prompt)
 submit = st.button("Submit", disabled=disable_submit_button)
 
 st.divider()
@@ -112,7 +115,7 @@ if submit:
                 st.session_state.differences, 
                 st.session_state.new_responses, 
                 st.session_state.errors
-            ) = run_full_process(st.session_state.model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.customisations, st.session_state.system_prompt, st.session_state.mutation_messages)
+            ) = run_full_process(st.session_state.chat_model, st.session_state.chat_samples, st.session_state.mutation_request, st.session_state.customisations, st.session_state.system_prompt, st.session_state.mutation_messages)
 
             st.session_state.end = time.time()
             print(f"Elapsed time: {st.session_state.end - st.session_state.start} seconds")
@@ -131,6 +134,10 @@ if st.session_state.show_results:
     # generate and display URLs for Copilot Playground Diff Tool
     st.subheader("Generate Diff Tool URLs")
     get_diff_urls()
+
+    # select reasoning model and run hallucination judge
+    st.subheader("Run hallucination judge")
+    run_hallucination_judge()
 
     # define buttons for navigating through the individual chat samples
     st.subheader("Individual chat sample results")

@@ -12,6 +12,10 @@ from mutation_data import Mutation, get_affected_role, get_mutation_messages
 # maximum number of times that the mutation / response generation process will be retried
 MAX_RETRY = 1
 
+# file paths for hallucination judge prompts
+CLAIMBREAK_PROMPT_FILE = "prompts\\claimbreak.txt"
+SCORE_PROMPT_FILE = "prompts\\score_all.txt"
+
 
 def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_responses):
     """
@@ -46,7 +50,7 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
     Regenerates the final assistant response using the mutated chat samples.
 
     Args:
-        model (str): The model to use for generating the new responses.
+        model (str): The chat model to use for generating the new responses.
         system_prompt (dict): The system prompt to use for generating new responses.
         mutated_chat_samples (list<dict>): The mutated chat samples.
 
@@ -178,7 +182,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
     Mutates the chat sample based on the mutation request.
 
     Args:
-        model (str): The model to use for inducing the mutations.
+        model (str): The chat model to use for inducing the mutations.
         chat_samples (list<dict>): The original chat samples.
         mutation_request (str): The type of mutation to apply.
         customisations (dict): The customisations to apply to the mutation.
@@ -283,7 +287,7 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
     Runs the full process of mutating chat samples, computing differences, and generating new responses.
 
     Args:
-        model (str): The model to use for the inducing the mutations and generating the responses.
+        model (str): The chat model to use for the inducing the mutations and generating the responses.
         chat_samples (list<dict>): The original chat samples.
         mutation_request (str): The type of mutation to apply.
         customisations (dict): The customisations to apply to the mutation.
@@ -325,4 +329,94 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
         responses[i] = raw_responses[diff_successes.index(i)]
 
     return (mutated_chat_samples, mutation_messages, differences, responses, errors)
+
+
+def run_claimbreak(model, mutated_chat_samples):
+    """
+    Breaks the new response into a set of claims.
+
+    Args:
+        model (str): The reasoning model to use for evaluating the grounding of the new responses.
+        mutated_chat_samples (list<dict>): The mutated chat samples.
+
+    Returns:
+        claims (list<dict>): The breakdown of claims from the new responses.
+    """
+    # read claimbreak prompts from file
+    with open(CLAIMBREAK_PROMPT_FILE, 'r', encoding='utf-8') as f:
+        system_content, user_content = f.read().strip().split("\n")
+
+    claimbreak_requests = []
+    for chat in mutated_chat_samples:
+
+        if chat["messages"][0]["role"] == "user":
+            user_query = chat["messages"][0]["content"]
+        else:
+            raise Exception("No user utterance found in mutated chat sample.")
+        
+        if chat["messages"][-1]["role"] == "assistant":
+            assistant_reply = chat["messages"][-1]["content"]
+        else:
+            raise Exception("No assistant response found in mutated chat sample.")
+        
+        claimbreak_requests.append(
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_content
+                    },
+                    {
+                        "role": "user",
+                        "content": user_content.replace("{{Utterance}}", user_query).replace("{{ModelResponse}}", assistant_reply)
+                    }
+                ]
+            }
+        )
+    claims = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
+    return claims
+
+
+def run_score_all(model, mutated_chat_samples, claims):
+    """
+    Scores the claims from the new response.
+
+    Args:
+        model (str): The reasoning model to use for evaluating the grounding of the new responses.
+        mutated_chat_samples (list<dict>): The mutated chat samples.
+        claims (list<dict>): The breakdown of claims from the new responses.
+
+    Returns:
+        TODO
+    """
+    # read score_all prompts from file
+    with open(SCORE_PROMPT_FILE, 'r', encoding='utf-8') as f:
+        system_content, user_content = f.read().strip().split("\n")
+
+
+    score_all_requests = []
+    for chat, claim in zip(mutated_chat_samples, claims):
+
+        if chat["messages"][0]["role"] == "user" and chat["messages"][-1]["role"] == "assistant":
+            search_results = chat["messages"][1:-1] if len(chat["messages"]) > 2 else []
+        else:
+            raise Exception("The user utterance and/or the assistant response was not found in mutated chat sample.")
+        
+        score_all_requests.append(
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_content
+                    },
+                    {
+                        "role": "user",
+                        "content": user_content.replace("{{search_results}}", json.dumps(search_results)).replace("{{claims}}", json.dumps(claim))
+                    }
+                ]
+            }
+        )
+
+    scores = llm_api_client.send_batch_chat_request(model, score_all_requests)
+    return scores
 

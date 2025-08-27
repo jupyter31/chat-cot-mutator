@@ -2,6 +2,7 @@ import copy
 from deepdiff import DeepDiff
 import json
 import random
+import re
 
 from clients.foundry import foundry_client
 from clients.llm_api import llm_api_client
@@ -417,6 +418,24 @@ def run_score_all(model, mutated_chat_samples, claims):
             }
         )
 
-    scores = llm_api_client.send_batch_chat_request(model, score_all_requests)
+    reasoning_and_scores = llm_api_client.send_batch_chat_request(model, score_all_requests)
+
+    average_scores = []
+    for result in reasoning_and_scores:
+        result = result.split("\n\n")
+
+        reasoning = result[:-1]
+        final_scores = result[-1]
+        print(final_scores)
+
+        matches = re.findall(r'Claim \d+:\s*(\d+(?:\.\d+)?)', final_scores)
+        scores = [float(score) for score in matches]
+        print(scores)
+
+        average_scores.append(round(sum(scores) / len(scores), 2) if len(scores) > 0 else 0.0)
+
+    print()
+    print(average_scores)
+
     return scores
 

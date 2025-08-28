@@ -41,7 +41,7 @@ def display_individual_chat_sample_results():
         st.button("Next ➡", key="next_chat", on_click=click_next)
 
     # define tabs for displaying results of the mutation
-    tab1, tab2, tab3 = st.tabs(["Mutated chat sample", "Differences", "Responses"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Mutated chat sample", "Differences", "Responses", "Extras"])
 
     if st.session_state.chat_index not in (st.session_state.errors).keys():
         # add download button for mutated chat sample, and display the mutated chat sample
@@ -70,6 +70,26 @@ def display_individual_chat_sample_results():
             with col2:
                 st.markdown("#### New response")
                 st.write(st.session_state.new_responses[st.session_state.chat_index])
+
+        # show additional information that the user has chosen to generate e.g. diff tool URLs, hallucination judge scores
+        with tab4:
+            st.markdown("#### Diff Tool URL")
+            if st.session_state.show_diff_urls:
+                st.write(f"{st.session_state.diff_urls[st.session_state.chat_index]}")
+            else:
+                st.markdown("*Please generate the Diff Tool URLs to see the individual results here.*")
+
+            st.markdown("#### Hallucination judge score")
+            if st.session_state.show_scores:
+                if st.session_state.mean_scores[st.session_state.chat_index] is not None:
+                    st.write(f"{st.session_state.mean_scores[st.session_state.chat_index]}")
+                    st.markdown("**Claims and reasoning:**")
+                    for reasoning in st.session_state.reasonings[st.session_state.chat_index]:
+                        st.json(reasoning)
+                else:
+                    st.error("Sorry, something went wrong with the hallucination judge. Please try again.")
+            else:
+                st.markdown("*Please run the hallucination judge to see the individual results here.*")
 
     else:
         st.error(f"Chat sample {st.session_state.chat_index + 1} failed with error: {st.session_state.errors[st.session_state.chat_index]}")

@@ -45,7 +45,7 @@ def get_diff_urls():
 
         st.download_button(
             label="Download all Diff Tool URLs (.txt)",
-            data="\n".join(["null" if url is None else url for url in st.session_state.diff_urls]),
+            data="\n".join([url if url else "null" for url in st.session_state.diff_urls]),
             file_name="diff_urls.txt",
         )
 

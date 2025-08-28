@@ -14,8 +14,8 @@ from mutation_data import Mutation, get_affected_role, get_mutation_messages
 MAX_RETRY = 1
 
 # file paths for hallucination judge prompts
-CLAIMBREAK_PROMPT_FILE = "prompts\\claimbreak.txt"
-SCORE_PROMPT_FILE = "prompts\\score_all.txt"
+CLAIMBREAK_PROMPT_FILE = "prompts\\claimbreak.jsonl"
+SCORE_PROMPT_FILE = "prompts\\score_all.jsonl"
 
 
 def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_responses):
@@ -341,11 +341,11 @@ def run_claimbreak(model, mutated_chat_samples):
         mutated_chat_samples (list<dict>): The mutated chat samples.
 
     Returns:
-        claims (list<dict>): The breakdown of claims from the new responses.
+        claims (list<list<dict>>): The breakdown of claims from the new responses.
     """
     # read claimbreak prompts from file
     with open(CLAIMBREAK_PROMPT_FILE, 'r', encoding='utf-8') as f:
-        system_content, user_content = f.read().strip().split("\n")
+        system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
     claimbreak_requests = []
     for chat in mutated_chat_samples:
@@ -363,18 +363,16 @@ def run_claimbreak(model, mutated_chat_samples):
         claimbreak_requests.append(
             {
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": system_content
-                    },
+                    system_prompt,
                     {
                         "role": "user",
-                        "content": user_content.replace("{{Utterance}}", user_query).replace("{{ModelResponse}}", assistant_reply)
+                        "content": user_prompt["content"].replace("{{Utterance}}", user_query).replace("{{ModelResponse}}", assistant_reply)
                     }
                 ]
             }
         )
     claims = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
+
     return claims
 
 
@@ -385,15 +383,15 @@ def run_score_all(model, mutated_chat_samples, claims):
     Args:
         model (str): The reasoning model to use for evaluating the grounding of the new responses.
         mutated_chat_samples (list<dict>): The mutated chat samples.
-        claims (list<dict>): The breakdown of claims from the new responses.
+        claims (list<list<dict>>): The breakdown of claims from the new responses.
 
     Returns:
-        TODO
+        reasonings (list<list<dict>>): The reasoning for each claim's score.
+        average_scores (list<float>): The average score for each new response.
     """
     # read score_all prompts from file
     with open(SCORE_PROMPT_FILE, 'r', encoding='utf-8') as f:
-        system_content, user_content = f.read().strip().split("\n")
-
+        system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
     score_all_requests = []
     for chat, claim in zip(mutated_chat_samples, claims):
@@ -406,13 +404,10 @@ def run_score_all(model, mutated_chat_samples, claims):
         score_all_requests.append(
             {
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": system_content
-                    },
+                    system_prompt,
                     {
                         "role": "user",
-                        "content": user_content.replace("{{search_results}}", json.dumps(search_results)).replace("{{claims}}", json.dumps(claim))
+                        "content": user_prompt["content"].replace("{{search_results}}", json.dumps(search_results)).replace("{{claims}}", json.dumps(claim))
                     }
                 ]
             }
@@ -420,22 +415,19 @@ def run_score_all(model, mutated_chat_samples, claims):
 
     reasoning_and_scores = llm_api_client.send_batch_chat_request(model, score_all_requests)
 
+    reasonings = []
     average_scores = []
+
     for result in reasoning_and_scores:
         result = result.split("\n\n")
 
-        reasoning = result[:-1]
-        final_scores = result[-1]
-        print(final_scores)
+        reasoning, scores = result[0], result[1]
 
-        matches = re.findall(r'Claim \d+:\s*(\d+(?:\.\d+)?)', final_scores)
-        scores = [float(score) for score in matches]
-        print(scores)
+        reasoning = [json.loads(r) if is_json_valid(r) else None for r in reasoning.split("\n")]
+        scores = [float(score) for score in re.findall(r'Claim \d+:\s*(\d+(?:\.\d+)?)', scores)]
 
+        reasonings.append(reasoning)
         average_scores.append(round(sum(scores) / len(scores), 2) if len(scores) > 0 else 0.0)
 
-    print()
-    print(average_scores)
 
-    return scores
-
+    return (reasonings, average_scores)

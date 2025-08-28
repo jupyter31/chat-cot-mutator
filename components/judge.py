@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 
 from chat_dsat_mutator_controller import run_claimbreak, run_score_all
@@ -21,14 +22,43 @@ def run_hallucination_judge():
     if st.button("Run hallucination judge", disabled=(not st.session_state.reasoning_model)):
         with st.spinner("Breaking responses into claims..."):
             try:
-                claims = run_claimbreak(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut])
+                st.session_state.claims = run_claimbreak(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut])
+                st.session_state.claims = [claims if claims else None for claims in st.session_state.claims]
             except Exception as e:
                 st.error(f"Error running claimbreak: {e}")
 
         with st.spinner("Scoring claims..."):
             try:
-                scores = run_score_all(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut], claims)
+                st.session_state.reasonings, st.session_state.mean_scores = run_score_all(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut], [claims for claims in st.session_state.claims if claims])
+
+                st.session_state.claims = [st.session_state.claims.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]
+                st.session_state.reasonings = [st.session_state.reasonings.pop(0) if (mut and claims) else None for mut, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
+                st.session_state.mean_scores = [st.session_state.mean_scores.pop(0) if (mut and claims) else None for mut, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
+
+                st.session_state.show_scores = True
+
             except Exception as e:
                 st.error(f"Error determining scores: {e}")
+
+    if st.session_state.show_scores:
+
+        print("\nCLAIMS")
+        print(st.session_state.claims)
+        print("\nREASONINGS")
+        print(st.session_state.reasonings)
+        print("\nSCORES")
+        print(st.session_state.mean_scores)
+
+        st.download_button(
+            label="Download individual claim score reasoning (.jsonl)",
+            data="\n".join(["null" if reasoning is None else json.dumps(reasoning) for reasoning in st.session_state.reasonings]),
+            file_name="claim_score_reasoning.jsonl",
+        ) 
+
+        st.download_button(
+            label="Download the score all chat samples (.txt)",
+            data="\n".join(["null" if mean_score is None else str(mean_score) for mean_score in st.session_state.mean_scores]),
+            file_name="mean_chat_scores.txt",
+        ) 
 
     st.divider()

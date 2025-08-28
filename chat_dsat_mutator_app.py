@@ -39,6 +39,7 @@ init_session_state({
     "slider_params": {},
     "show_diff_urls": False,
     "show_results": False,
+    "show_scores": False,
     "system_prompt": {}
 })
 
@@ -108,6 +109,7 @@ if submit:
             st.session_state.chat_index = 0
             st.session_state.show_results = False
             st.session_state.show_diff_urls = False
+            st.session_state.show_scores = False
 
             (
                 st.session_state.mutated_chat_samples, 

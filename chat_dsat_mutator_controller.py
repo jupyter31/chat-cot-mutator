@@ -14,8 +14,8 @@ from mutation_data import Mutation, get_affected_role, get_mutation_messages
 MAX_RETRY = 1
 
 # file paths for hallucination judge prompts
-CLAIMBREAK_PROMPT_FILE = "prompts\\claimbreak.jsonl"
-SCORE_PROMPT_FILE = "prompts\\score_all.jsonl"
+CLAIMBREAK_PROMPT_FILE = "prompts\\judge\\claimbreak.jsonl"
+SCORE_PROMPT_FILE = "prompts\\judge\\score_all.jsonl"
 
 
 def add_new_responses_to_mutated_chat_samples(mutated_chat_samples, new_responses):

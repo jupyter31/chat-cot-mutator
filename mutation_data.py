@@ -94,16 +94,17 @@ def get_mutation_messages(mutation_request, customisations=None):
                     "content": (
                         "Your task is to introduce spelling, keyboard proximity, and visual similarity errors into user-written text with a {level} plausibility level.\n"
                         "- Keyboard proximity errors occur when adjacent keys are mistakenly pressed.\n"
-                        "- Visual similarity errors involve substituting characters that look alike (e.g., '0' for 'O', '1' for 'l')."
+                        "- Visual similarity errors involve substituting characters that look alike (e.g., '0' for 'O', '1' for 'l').\n\n"
+                        "From our conversation, identify the first user message.\n"
+                        "Then:\n"
+                        "- Rewrite it with spelling mistakes, keyboard proximity errors, and visual similarity errors with a {level} plausibility level.\n"
+                        "- Return only the altered message as a single string, without any commentary or explanation."
                     ).format_map(customisations),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "From our conversation, identify the original user message.\n"
-                        "Then:\n"
-                        "- Rewrite it with spelling mistakes, keyboard proximity errors, and visual similarity errors with a {level} plausibility level.\n"
-                        "- Return only the altered message as a single string, without any commentary or explanation."
+                        "Begin! Review our conversation history and complete your task."
                     ).format_map(customisations),
                 }
             )

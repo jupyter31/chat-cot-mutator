@@ -1,23 +1,20 @@
 # Instructions
 
 ## You will receive:
-- A **list of messages** from a conversation with Copilot (labeled ## Messages)
+- A **list of tool results** from a conversation with Copilot (labeled ## Tool results)
 
 ## Your task:
-Identify all tool results from the **list of messages** (with `"role": "tool"`).
-For each object in the `results` array of those message:
-1. Apply realistic {{written_categories}} jitter to the main content of the object.
-{{instructions}}
-2. Do not change anything that is not a date or number.\n
-3. Do not remove any object keys.
-4. Do not remove any metadata from the object about the fetched result.
-
-Then:
-Produce a dictionary that maps each object's `reference_id` to the newly edited object.
-Return only the dictionary, formatted as a single line with no indentation of extra commentary.
+1. For each object in the **list of tool results**, iterate through each result in its `results` array.
+2. For each result:
+   a. Apply realistic {{written_categories}} jitter to the main content of the object.
+      {{instructions}}
+   b. Do not change anything that is not a date or number.\n
+   c. Do not remove any object keys.
+   d. Do not remove any metadata from the object about the fetched result.
+3. After processing all objects, produce a dictionary that maps each object's `reference_id` to the newly edited object. Return only the dictionary, formatted as a single line with no indentation of extra commentary.
 
 
 # Task
 
-## Messages
-{{messages}}
+## Tool results
+{{tool_results}}

@@ -5,11 +5,11 @@ import time
 from mutation_data import Mutation
 
 from chat_dsat_mutator_controller import run_full_process
-from components.diff_urls import get_diff_urls
-from components.judge import run_hallucination_judge
-from components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
-from components.results import display_individual_chat_sample_results, download_all
-from components.system_prompt import edit_system_prompt, init_system_prompt
+from app_components.diff_urls import get_diff_urls
+from app_components.judge import run_hallucination_judge
+from app_components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
+from app_components.results import display_individual_chat_sample_results, download_all
+from app_components.system_prompt import edit_system_prompt, init_system_prompt
 
 
 # initialise session state with default values

@@ -1,3 +1,4 @@
+<|im_start|>system
 # Instructions
 
 ## You will receive:
@@ -11,9 +12,11 @@ These errors should simulate realistic typing mistakes including:
    
 Then:
 Return only the modified query as a single string, without any commentary or explanation.
+<|im_end|>
 
-
+<|im_start|>user
 # Task
 
 ## User query
 {{user_query}}
+<|im_end|>

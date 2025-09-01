@@ -1,6 +1,8 @@
 from enum import Enum
+import json
 
 class Mutation(Enum):
+    CLAIM_ALIGNED_DELETION = "Claim-aligned deletion"
     SALIENCE_DROP = "Salience drop"
     TOPIC_DILUTION = "Topic dilution"
     NEGATED_EVIDENCE_INJECTION = "Negated-evidence injection"
@@ -15,7 +17,7 @@ MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
 
 
 DEFAULT_MUTATION_CUSTOMISATIONS = {
-    Mutation.SALIENCE_DROP: {"number": 10},
+    Mutation.CLAIM_ALIGNED_DELETION: {"number": 5},
     Mutation.TOPIC_DILUTION: {"level": "high"},
     Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
     Mutation.PASSAGE_SHUFFLE: {"shuffle_depth": "inner"},
@@ -56,156 +58,77 @@ def get_mutation_messages(mutation_request, customisations=None):
 
 
     match mutation_request:
+        case Mutation.CLAIM_ALIGNED_DELETION:
+            # Claim-aligned deletion involves deleting the the claims from the context that have the greatest importance with regards to the assistant's reply.
+
+            with open('prompts\\mutations\\claim_aligned_deletion.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+                return [
+                    {
+                        "role": "system",
+                        "content": system_prompt["content"].replace("{{number}}", str(customisations["number"]))
+                    },
+                    user_prompt  
+                ]
+            
         case Mutation.SALIENCE_DROP:
-            # Salience drop involves deleting the passage whose tokens have the largest attribution with respect to the answer.
-            # This means that we remove passages from the context that have the largest influence on the answer.
+            # Salience drop involves deleting the main content of the tool results, as if the files / emails were empty.
 
-            customisations["plural"] = "s" if customisations["number"] > 1 else ""
-
-            return (
-                {
-                    "role": "system",
-                    "content": (
-                        "Your task is to process tool-generated messages and extract the most influential content that is used in the assistant response. You do not add any extra content."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "1. Identify and rank the passages (e.g. sentences, bullet points, small paragraphs) based on their contextual importance to the original user message and assistant response.\n"
-                        "2. Select and remove only the top {number} most relevant passage{plural} from the object values. Do not remove any other passages.\n"
-                        "3. Do not remove any object keys.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
-                }
-            )
+            with open('prompts\\mutations\\salience_drop.jsonl', 'r', encoding='utf-8') as f:
+                return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.TOPIC_DILUTION:
             # Topic dilution involves injecting spelling errors, keyboard proximity errors, and visual similarity errors into the chat sample.
             # This is done to add noise to the prompt and the tool content.
 
-            return (
-                {
-                    "role": "system",
-                    "content": (
-                        "Your task is to introduce spelling, keyboard proximity, and visual similarity errors into user-written text with a {level} plausibility level.\n"
-                        "- Keyboard proximity errors occur when adjacent keys are mistakenly pressed.\n"
-                        "- Visual similarity errors involve substituting characters that look alike (e.g., '0' for 'O', '1' for 'l').\n\n"
-                        "From our conversation, identify the first user message.\n"
-                        "Then:\n"
-                        "- Rewrite it with spelling mistakes, keyboard proximity errors, and visual similarity errors with a {level} plausibility level.\n"
-                        "- Return only the altered message as a single string, without any commentary or explanation."
-                    ).format_map(customisations),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Begin! Review our conversation history and complete your task."
-                    ).format_map(customisations),
-                }
-            )
+            with open('prompts\\mutations\\topic_dilution.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+                return [
+                    {
+                        "role": "system",
+                        "content": system_prompt["content"]
+                            .replace("{{level}}", customisations["level"])
+                    },
+                    user_prompt  
+                ]
 
         case Mutation.NEGATED_EVIDENCE_INJECTION:
             # Negated-evidence injection involves injecting a passage that contradicts the answer.
 
-            return (
-                {
-                    "role": "system",
-                    "content": (
-                        "Your task is to rewrite tool-generated content by negating contextual statements.\n"
-                        "- Preserve correct grammar.\n"
-                        "- Do not edit entity names, file names, references, or object keys.\n"
-                        "- Do not remove any metadata.\n"
-                        "- Only modify the main content of each result object."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "1. Identify the statements that were used or paraphrased in the assistant's response.\n"
-                        "2. Rewrite those statements to negate them (e.g., 'X is true' → 'X is not true').\n"
-                        "3. Do not negate phrases that include metadata about the fetched resource (e.g. document, file, meeting invite). For example, do not negate phrases like 'Alice invited you to access a file'.\n"
-                        "4. Do not delete any chunks of the content or metadata such as the fields at the end of a tool call result object.\n"
-                        "5. Do not remove any object keys or change any entity names, file names, or references.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
-                }
-            )
+            with open('prompts\\mutations\\negated_evidence_injection.jsonl', 'r', encoding='utf-8') as f:
+                return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.DATE_NUMBER_JITTER:
             # Date / number jitter involves making date-swap and number-swap edits.
 
             customisations["written_categories"] = (" and ").join(customisations["categories"])
 
-            customisations["system_message"] = "".join([
-                "- Replace dates with plausible alternatives (e.g., past dates with other past dates).\n" if "date" in customisations["categories"] else "",
-                "- Replace numbers (e.g., measurements, labels, section numbers) with different but reasonable values." if "number" in customisations["categories"] else ""
+            customisations["instructions"] = "".join([
+                "   - Replace dates with plausible alternatives (e.g., past dates with other past dates).\n" if "date" in customisations["categories"] else "",
+                "   - Replace numbers (e.g., measurements, labels, section numbers) with different but reasonable values.\n" if "number" in customisations["categories"] else ""
             ])
 
-            instructions = []
-            if "date" in customisations["categories"]:
-                instructions.append("Replace dates with different plausible dates.\n")
-            if "number" in customisations["categories"]:
-                instructions.append("Replace numbers with different reasonable values.\n")
-            instructions.extend("Do not change anything that is not a date or number.\n")
-            customisations["user_message"] = "".join(f"{i+1}. {step}" for i, step in enumerate(instructions))
+            with open('prompts\\mutations\\date_number_jitter.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
-            return (
+            return [
                 {
                     "role": "system",
-                    "content": ( 
-                        "Your task is to apply realistic {written_categories} jitter to tool-generated content.\n"
-                        "{system_message}"
-                        "- Do not remove any object keys."
-                    ).format_map(customisations),
+                    "content": system_prompt["content"]
+                        .replace("{{written_categories}}", customisations["written_categories"])
+                        .replace("{{instructions}}", customisations["instructions"])
                 },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "{user_message}"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
-                }
-            )
+                user_prompt  
+            ]
+           
 
         case Mutation.PASSAGE_SHUFFLE:
             # Passage shuffle randomises the passage order to test position bias.
 
-            return (
-                {
-                    "role": "system",
-                    "content": (
-                        "Your task is to randomize and shuffle the order of passages within tool-generated content.\n"
-                        "Do not preserve the logical flow of the passages.\n"
-                        "Do not remove any object keys or modify entity names, file names, or references."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "1. Rewrite the `content` field to shuffle the order of the passages. Do not preserve the logical flow of passages.\n"
-                        "2. Do not delete any content.\n"
-                        "3. Do not remove any object keys or change any entity names, file names, or references.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
-                }
-            )
+            with open('prompts\\mutations\\passage_shuffle.jsonl', 'r', encoding='utf-8') as f:
+                return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.ENTITY_SWAP:
             # Entity swapping involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
@@ -214,130 +137,69 @@ def get_mutation_messages(mutation_request, customisations=None):
 
             customisations["entity_plural"] = "entities" if customisations["number"] > 1 else "entity"
 
-            return (
+            with open('prompts\\mutations\\entity_swap.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+            return [
                 {
                     "role": "system",
-                    "content": (
-                        "Your task is to perform entity swapping on tool-generated content.\n"
-                        "- Only swap the following types of entities: {written_entity_types}.\n"
-                        "- Use only entities that have already appeared in the conversation.\n"
-                        "- Ensure bidirectional consistency (e.g., if 'Alice' is swapped with 'Bob', also swap 'Bob' with 'Alice').\n"
-                        "- Ensure consistency of swaps across all messages (e.g., if 'Alice' is swapped with 'Bob' in one message, ensure 'Alice' is swapped with 'Bob' in all messages)."
-                    ).format_map(customisations),
+                    "content": system_prompt["content"]
+                        .replace("{{written_entity_types}}", customisations["written_entity_types"])
+                        .replace("{{entity_plural}}", customisations["entity_plural"])
+                        .replace("{{number}}", str(customisations["number"]))
                 },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "\tFor each type of entity ({written_entity_types}):\n"
-                        "\t1. Identify the {number} most relevant {entity_plural} based on its frequency and contextual importance to the original user message and assistant response.\n"
-                        "\t1. Swap the identified {entity_plural} in the tool content with another of the same type that has appeared in the conversation.\n"
-                        "\t2. Ensure entity swaps are consistent across all messages.\n"
-                        "\t3. Do not remove any object keys.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
-                }
-            )
+                user_prompt
+            ]
 
         case Mutation.UNIT_CONVERSION_REWRITE:
             # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
 
             customisations["written_unit_types"] = (", ").join(customisations["unit_types"])
 
-            return (
+            with open('prompts\\mutations\\unit_conversion_rewrite.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+            return [
                 {
                     "role": "system",
-                    "content": (
-                        "Your task is to swap units in tool-generated content with other units that measure the same type of quantity, without changing the numerical value.\n"
-                        "- Do not perform any mathematical conversions.\n"
-                        "- Only replace the unit (e.g., 'kilometers' → 'miles', 'Celsius' → 'Fahrenheit').\n"
-                        "- Ensure the replacement unit is appropriate for the quantity type.\n"
-                        "- Do not modify dates."
-                        "Examples:\n"
-                        "- Original: The distance is 5 kilometers.\n"
-                        "  Modified: The distance is 5 miles.\n"
-                        "- Original: The temperature is 20 degrees Celsius.\n"
-                        "  Modified: The temperature is 20 degrees Fahrenheit.\n"
-                        "- Original: She is 12 years old.\n"
-                        "  Modified: She is 12 months old."
-                    ),
+                    "content": system_prompt["content"]
+                        .replace("{{written_unit_types}}", customisations["written_unit_types"])
                 },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "1. Locate any units of measurement that pertain to {written_unit_types}.\n"
-                        "2. Replace each unit with a different unit of the same type, keeping the numerical value unchanged.\n"
-                        "3. Do not modify anything that is not a unit.\n"
-                        "4. Do not remove any object keys."
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
-                }
-            )
+                user_prompt
+            ]
 
         case Mutation.ABLATE_URL_LINKS:
             # Ablate URL links involves removing all URLs from the chat sample.
             # This means that the LLM does not have the the ability to access these information sources.
 
             if customisations["handling_choice"] == "remove":
-                customisations["system_message"] = "- Remove the surrounding phrases if necessary to maintain fluency."
-                customisations["user_message"] = "Remove all URLs from the `content` field, and adjust surrounding text to maintain grammatical correctness."
+                customisations["instruction"] = "Remove all URLs, and adjust surrounding text to maintain grammatical correctness."
             else:
-                customisations["system_message"] = "- Replace URLs with a placeholder such as '[URL link removed]'."
-                customisations["user_message"] = "1. Replace all URLs in the `content` field with a placeholder such as '[link removed]'."
+                customisations["instruction"] = "Replace all URLs with the placeholder '[link removed]'."
 
-            return (
+            with open('prompts\\mutations\\ablate_url_links.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+            return [
                 {
                     "role": "system",
-                    "content": (   
-                        "Your task is to remove all URLs from tool-generated content while preserving correct grammar.\n"
-                        "- URL links typically start with 'http://', 'https://', or 'www.'.\n"
-                        "- URL links typically end with a top-level domain such as '.com', '.org', and '.net'.\n"
-                        "{system_message}"
-                    ).format_map(customisations),
+                    "content": system_prompt["content"]
+                        .replace("{{instruction}}", customisations["instruction"])
                 },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        "1. {user_message}\n"
-                        "2. Do not remove any object keys.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ).format_map(customisations),
-                }
-            )
+                user_prompt
+            ]
 
         case _:
             # Default case for free-form mutation requests
 
-            return (
+            with open('prompts\\mutations\\free_form.jsonl', 'r', encoding='utf-8') as f:
+                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+            return [
                 {
                     "role": "system",
-                    "content": (
-                        "Your task is to apply a specified mutation to tool-generated content from our conversation history.\n"
-                        "- The mutation will be described in the user message.\n"
-                        "- You must not remove any object keys or modify entity names, file names, or references unless explicitly instructed."
-                    ),
+                    "content": system_prompt["content"]
+                        .replace("{{mutation_request}}", mutation_request)
                 },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyse all of the tool-generated messages from our conversation that contain tool call results.\n"
-                        "For each object in the `results` array of each message:\n"
-                        f"1. Apply the following mutation: {mutation_request}\n"
-                        "2. Do not remove any object keys.\n"
-                        "Then:\n"
-                        "Return a dictionary mapping each tool message's `reference_id` (as a string) to its edited object.\n"
-                        "Output only the dictionary, formatted as a single line with no indentation or extra commentary."
-                    ),
-                }
-            )
+                user_prompt
+            ]

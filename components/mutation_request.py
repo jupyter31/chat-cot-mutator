@@ -50,16 +50,16 @@ def get_mutation_request():
 
 
 def get_mutation_customisation():
-    if st.session_state.mutation_request in Mutation and st.session_state.mutation_request != Mutation.NEGATED_EVIDENCE_INJECTION:
+    if st.session_state.mutation_request in Mutation and st.session_state.mutation_request not in [Mutation.NEGATED_EVIDENCE_INJECTION, Mutation.SALIENCE_DROP]:
         st.markdown("##### Mutation customisations")
         mut_str = (st.session_state.mutation_request).name.lower()
         
     match st.session_state.mutation_request:
 
-        case Mutation.SALIENCE_DROP:
+        case Mutation.CLAIM_ALIGNED_DELETION:
             st.session_state[f"{mut_str}_number"] = st.session_state[f"{mut_str}_number"]
             number = st.slider(
-                "Select the number of salient passages to drop",
+                "Select how many of the most important claims should be deleted from the context.",
                 min_value=1,
                 max_value=10,
                 step=1,

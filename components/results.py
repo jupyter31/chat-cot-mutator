@@ -85,7 +85,10 @@ def display_individual_chat_sample_results():
                     st.write(f"{st.session_state.mean_scores[st.session_state.chat_index]}")
                     st.markdown("**Claims and reasoning:**")
                     for reasoning in st.session_state.reasonings[st.session_state.chat_index]:
-                        st.json(reasoning)
+                        try:
+                            st.json(reasoning)
+                        except:
+                            st.write(reasoning)
                 else:
                     st.error("Sorry, something went wrong with the hallucination judge. Please try again.")
             else:

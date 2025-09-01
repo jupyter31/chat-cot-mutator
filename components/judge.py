@@ -23,7 +23,7 @@ def run_hallucination_judge():
         with st.spinner("Breaking responses into claims..."):
             try:
                 st.session_state.claims = run_claimbreak(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut])
-                st.session_state.claims = [claims if claims else None for claims in st.session_state.claims]
+                st.session_state.claims = [claims if (claims and claims != "[]") else None for claims in st.session_state.claims]
             except Exception as e:
                 st.error(f"Error running claimbreak: {e}")
 
@@ -41,13 +41,6 @@ def run_hallucination_judge():
                 st.error(f"Error determining scores: {e}")
 
     if st.session_state.show_scores:
-
-        print("\nCLAIMS")
-        print(st.session_state.claims)
-        print("\nREASONINGS")
-        print(st.session_state.reasonings)
-        print("\nSCORES")
-        print(st.session_state.mean_scores)
 
         st.download_button(
             label="Download individual claim score reasoning (.jsonl)",

@@ -217,11 +217,37 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
 
     # get default mutation messages if not provided
     if mutation_messages is None:
-        mutation_messages = list(get_mutation_messages(mutation_request))
+        mutation_messages = get_mutation_messages(mutation_request)
 
-    # add mutation messages to each chat sample
-    for chat in chat_samples_copy:
-        requests.append({"messages": chat["messages"] + mutation_messages})
+    # add chat sample to the mutation messages
+    if mutation_request != Mutation.TOPIC_DILUTION:
+        for chat in chat_samples_copy:
+            tool_results = [msg for msg in chat["messages"] if msg["role"] == "tool"]
+            requests.append(
+                {
+                    "messages": [
+                        mutation_messages[0],
+                        {
+                            "role": "user",
+                            "content": mutation_messages[1]["content"].replace("{{tool_results}}", json.dumps(tool_results))
+                        }
+                    ]
+                }
+            )
+    else:
+        for chat in chat_samples_copy:
+            requests.append(
+                {
+                    "messages": [
+                        mutation_messages[0],
+                        {
+                            "role": "user",
+                            "content": mutation_messages[1]["content"].replace("{{user_query}}", chat["messages"][0]["content"])
+                        }
+                    ]
+                }
+            )
+
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)

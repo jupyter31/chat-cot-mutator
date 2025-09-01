@@ -12,6 +12,7 @@ For each object in the `results` array of those message:
 4. Do not remove any object keys.
 5. Do not remove any metadata from the object about the fetched result.
 6. Repeat with the next object / next tool result message.
+
 Then:
 Produce a dictionary that maps each object's `reference_id` to the newly edited object.
 Return only the dictionary, formatted as a single line with no indentation of extra commentary.

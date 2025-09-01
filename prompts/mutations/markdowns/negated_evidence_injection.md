@@ -12,7 +12,7 @@
    d. Do not delete any claims. Do not delete large chunks of the context.
    e. Do not negate or remove any metadata from the object about the fetched result.
    f. Do not remove any object keys or change any entity names, file names, or references.
-3. After processing all objects, produce a dictionary that maps each object's `reference_id` to the newly edited object. Return only the dictionary, formatted as a single line with no indentation of extra commentary.
+3. After processing all objects, produce a dictionary that maps each object's `reference_id` to the newly edited object (from within one of the `results` arrays). Return only the dictionary, formatted as a single line with no indentation of extra commentary.
 
 
 # Task

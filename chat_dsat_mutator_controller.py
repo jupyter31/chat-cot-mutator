@@ -329,6 +329,8 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
         list<int>: The indices of the chat samples that failed the mutation process.
     """
     print()
+    print(mutation_request)
+    print()
     raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, customisations, mutation_messages)
     mut_successes = [i for i, chat in enumerate(raw_mutated_chat_samples) if chat is not None]
     errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}
@@ -369,6 +371,8 @@ def run_claimbreak(model, mutated_chat_samples):
     Returns:
         claims (list<list<dict>>): The breakdown of claims from the new responses.
     """
+    print()
+    print("Running claimbreak...")
     # read claimbreak prompts from file
     with open(CLAIMBREAK_PROMPT_FILE, 'r', encoding='utf-8') as f:
         system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
@@ -415,6 +419,8 @@ def run_score_all(model, mutated_chat_samples, claims):
         reasonings (list<list<dict>>): The reasoning for each claim's score.
         average_scores (list<float>): The average score for each new response.
     """
+    print()
+    print("Scoring claims...")
     # read score_all prompts from file
     with open(SCORE_PROMPT_FILE, 'r', encoding='utf-8') as f:
         system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
@@ -456,4 +462,5 @@ def run_score_all(model, mutated_chat_samples, claims):
         average_scores.append(round(sum(scores) / len(scores), 2) if len(scores) > 0 else 0.0)
 
 
+    print("COMPLETE")
     return (reasonings, average_scores)

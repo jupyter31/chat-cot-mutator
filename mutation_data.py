@@ -18,26 +18,12 @@ MUTATION_MAPPING = {mut: mut.value for mut in Mutation}
 
 DEFAULT_MUTATION_CUSTOMISATIONS = {
     Mutation.CLAIM_ALIGNED_DELETION: {"number": 5},
-    Mutation.TOPIC_DILUTION: {"level": "high"},
     Mutation.DATE_NUMBER_JITTER: {"categories": ["date", "number"]},
     Mutation.PASSAGE_SHUFFLE: {"shuffle_depth": "inner"},
     Mutation.ENTITY_SWAP: {"entity_types": ["names"], "number": 1},
     Mutation.UNIT_CONVERSION_REWRITE: {"unit_types": ["time"]},
     Mutation.ABLATE_URL_LINKS: {"handling_choice": "remove"},
 }
-
-
-def get_affected_role(mutation_request):
-    """
-    Returns the role associated with the specific message we are requesting to mutate.
-
-    Args:
-        mutation_request (str): The type of mutation to apply.
-
-    Returns:
-        str: The role of the messages that will be modified according to the type of mutation.
-    """
-    return "user" if mutation_request == Mutation.TOPIC_DILUTION else "tool"
 
 
 def get_mutation_messages(mutation_request, customisations=None):
@@ -79,20 +65,10 @@ def get_mutation_messages(mutation_request, customisations=None):
                 return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.TOPIC_DILUTION:
-            # Topic dilution involves injecting spelling errors, keyboard proximity errors, and visual similarity errors into the chat sample.
-            # This is done to add noise to the prompt and the tool content.
+            # Topic dilution involves adding noise to the tool call results.
 
             with open('prompts\\mutations\\topic_dilution.jsonl', 'r', encoding='utf-8') as f:
-                system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
-
-                return [
-                    {
-                        "role": "system",
-                        "content": system_prompt["content"]
-                            .replace("{{level}}", customisations["level"])
-                    },
-                    user_prompt  
-                ]
+                return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.NEGATED_EVIDENCE_INJECTION:
             # Negated-evidence injection involves injecting a passage that contradicts the answer.

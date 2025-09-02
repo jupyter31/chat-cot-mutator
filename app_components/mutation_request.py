@@ -50,7 +50,7 @@ def get_mutation_request():
 
 
 def get_mutation_customisation():
-    if st.session_state.mutation_request in Mutation and st.session_state.mutation_request not in [Mutation.NEGATED_EVIDENCE_INJECTION, Mutation.SALIENCE_DROP]:
+    if st.session_state.mutation_request in Mutation and st.session_state.mutation_request not in [Mutation.SALIENCE_DROP, Mutation.TOPIC_DILUTION, Mutation.NEGATED_EVIDENCE_INJECTION]:
         st.markdown("##### Mutation customisations")
         mut_str = (st.session_state.mutation_request).name.lower()
         
@@ -67,21 +67,6 @@ def get_mutation_customisation():
             )
 
             return {"number": number}
-
-        case Mutation.TOPIC_DILUTION:
-            st.session_state[f"{mut_str}_level"] = st.session_state[f"{mut_str}_level"]
-            level = st.radio(
-                "Select the plausibility of the topic dilution",
-                options=["high", "medium", "low"],
-                format_func=lambda x: f"{x.title()} plausibility",
-                horizontal=True,
-                key=f"{mut_str}_level"
-            )
-
-            return {"level": level}
-        
-        case Mutation.NEGATED_EVIDENCE_INJECTION:
-            return {}
 
         case Mutation.DATE_NUMBER_JITTER:
             # TODO: enforce at least one selection

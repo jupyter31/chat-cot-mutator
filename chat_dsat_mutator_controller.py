@@ -7,7 +7,7 @@ import re
 from clients.foundry import foundry_client
 from clients.llm_api import llm_api_client
 
-from mutation_data import Mutation, get_affected_role, get_mutation_messages
+from mutation_data import Mutation, get_mutation_messages
 
 
 # maximum number of times that the mutation / response generation process will be retried
@@ -220,91 +220,64 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
         mutation_messages = get_mutation_messages(mutation_request)
 
     # add chat sample to the mutation messages
-    if mutation_request != Mutation.TOPIC_DILUTION:
-        for chat in chat_samples_copy:
-            tool_results = [msg for msg in chat["messages"] if msg["role"] == "tool"]
-            requests.append(
-                {
-                    "messages": [
-                        mutation_messages[0],
-                        {
-                            "role": "user",
-                            "content": mutation_messages[1]["content"].replace("{{tool_results}}", json.dumps(tool_results))
-                        }
-                    ]
-                }
-            )
-    else:
-        for chat in chat_samples_copy:
-            requests.append(
-                {
-                    "messages": [
-                        mutation_messages[0],
-                        {
-                            "role": "user",
-                            "content": mutation_messages[1]["content"].replace("{{user_query}}", chat["messages"][0]["content"])
-                        }
-                    ]
-                }
-            )
-
+    for chat in chat_samples_copy:
+        tool_results = [msg for msg in chat["messages"] if msg["role"] == "tool"]
+        requests.append(
+            {
+                "messages": [
+                    mutation_messages[0],
+                    {
+                        "role": "user",
+                        "content": mutation_messages[1]["content"].replace("{{tool_results}}", json.dumps(tool_results))
+                    }
+                ]
+            }
+        )
 
     # send the requests to the LLM API
     responses = llm_api_client.send_batch_chat_request(model, requests)
-    if mutation_request != Mutation.TOPIC_DILUTION:
-        safe_responses = get_safe_responses(responses)
-
-    affected_role = get_affected_role(mutation_request)
+    safe_responses = get_safe_responses(responses)
 
     mutated_chat_samples = []
-    if affected_role == "user":
-        # replace the original user message with the mutated user message
-        for chat, response in zip(chat_samples_copy, responses):
+
+    # retry performing mutations for any responses that are not valid JSON
+    retry = MAX_RETRY
+    while retry > 0:   
+        failed_indices = [i for i, r in enumerate(safe_responses) if not is_json_valid(r)]
+        if not failed_indices:
+            break
+
+        retry_requests = [requests[i] for i in failed_indices]
+        retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+        safe_retry_resposes = get_safe_responses(retry_responses)
+
+        for i, retry_response in zip(failed_indices, safe_retry_resposes):
+            if is_json_valid(retry_response):
+                safe_responses[i] = json.loads(retry_response)
+
+        retry -= 1
+
+    # replace content of tool messages with mutated content
+    for i, (chat, response) in enumerate(zip(chat_samples_copy, safe_responses)):
+        try:
+            response = json.loads(response)
             for msg in chat["messages"]:
-                if msg["role"] == affected_role:
-                    msg["content"] = response
+                if msg["role"] == "tool" and json.loads(msg["content"]).get("results") is not None:
+                    msg["content"] = json.loads(msg["content"])
+
+                    for i, result in enumerate(msg["content"]["results"]):
+                        # use the reference number from the result to know which values to replace
+                        reference_id = str(result["reference_id"])
+                        if reference_id in response.keys():
+                            msg["content"]["results"][i] = response[reference_id]
+
+                    msg["content"] = json.dumps(msg["content"])
 
             mutated_chat_samples.append(chat)
 
-    elif affected_role == "tool":
-        # retry performing mutations for any responses that are not valid JSON
-        retry = MAX_RETRY
-        while retry > 0:   
-            failed_indices = [i for i, r in enumerate(safe_responses) if not is_json_valid(r)]
-            if not failed_indices:
-                break
-
-            retry_requests = [requests[i] for i in failed_indices]
-            retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
-            safe_retry_resposes = get_safe_responses(retry_responses)
-
-            for i, retry_response in zip(failed_indices, safe_retry_resposes):
-                if is_json_valid(retry_response):
-                    safe_responses[i] = json.loads(retry_response)
-
-            retry -= 1
-
-        # replace content of tool messages with mutated content
-        for i, (chat, response) in enumerate(zip(chat_samples_copy, safe_responses)):
-            try:
-                response = json.loads(response)
-                for msg in chat["messages"]:
-                    if msg["role"] == affected_role and json.loads(msg["content"]).get("results") is not None:
-                        msg["content"] = json.loads(msg["content"])
-
-                        for i, result in enumerate(msg["content"]["results"]):
-                            # use the reference number from the result to know which values to replace
-                            reference_id = str(result["reference_id"])
-                            if reference_id in response.keys():
-                                msg["content"]["results"][i] = response[reference_id]
-
-                        msg["content"] = json.dumps(msg["content"])
-
-                mutated_chat_samples.append(chat)
-
-            except Exception:
-                # put None where the mutation failed
-                mutated_chat_samples.append(None)
+        except Exception:
+            # put None where the mutation failed
+            mutated_chat_samples.append(None)
 
     return (mutated_chat_samples, mutation_messages)
 
@@ -331,6 +304,7 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
     print()
     print(mutation_request)
     print()
+
     raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, customisations, mutation_messages)
     mut_successes = [i for i, chat in enumerate(raw_mutated_chat_samples) if chat is not None]
     errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}

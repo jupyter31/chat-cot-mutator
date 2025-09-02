@@ -301,10 +301,10 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
         list<str>: The new responses generated from the mutated chat samples.
         list<int>: The indices of the chat samples that failed the mutation process.
     """
-    print()
-    print(mutation_request)
-    print()
 
+    print(f"\n{mutation_request}")
+
+    print("\nMutating chat samples...")
     raw_mutated_chat_samples, mutation_messages = mutate_chat_samples(model, chat_samples, mutation_request, customisations, mutation_messages)
     mut_successes = [i for i, chat in enumerate(raw_mutated_chat_samples) if chat is not None]
     errors = {i: f"Mutation failed after {MAX_RETRY} attempts." for i, chat in enumerate(raw_mutated_chat_samples) if chat is None}
@@ -315,6 +315,7 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
     errors.update({i: "No differences were found between the original and mutated chat sample." for i, diff in zip(mut_successes, raw_differences) if not diff})
     print(len(diff_successes), "differences computed out of", len(mut_successes))
 
+    print("\nGenerating new assistant responses...")
     raw_responses = generate_responses(model, system_prompt, [raw_mutated_chat_samples[i] for i in diff_successes])
     res_successes = [i for i, response in zip(diff_successes, raw_responses) if response is not None]
     errors.update({i: f"Response generation failed after {MAX_RETRY} attempts." for i, response in zip(diff_successes, raw_responses) if response is None})

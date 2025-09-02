@@ -16,13 +16,17 @@ def download_all():
         label="Download all mutated chat samples (.jsonl)",
         data="\n".join([json.dumps(chat) for chat in st.session_state.mutated_chat_samples]),
         file_name="mutated_chat_samples.jsonl",
-        mime="application/jsonl"
+        mime="application/jsonl",
+        type="tertiary",
+        icon="⬇️"
     )
 
     st.download_button(
         label="Download error log (.txt)",
         data="\n".join([f"Chat sample {k + 1} failed with error: {v}"for k, v in sorted(st.session_state.errors.items())]),
         file_name="errors.txt",
+        type="tertiary",
+        icon="⬇️"
     )
 
     st.divider()

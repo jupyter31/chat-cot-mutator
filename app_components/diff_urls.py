@@ -28,11 +28,11 @@ def get_diff_urls():
             try:
                 raw_diff_urls = call_foundry_client(
                     foundry_token,
-                    [chat for chat, mut in zip(st.session_state.chat_samples, st.session_state.mutated_chat_samples) if mut],
-                    [mut for mut in st.session_state.mutated_chat_samples if mut]
+                    [chat for chat, mut_chat in zip(st.session_state.chat_samples, st.session_state.mutated_chat_samples) if mut_chat],
+                    [mut_chat for mut_chat in st.session_state.mutated_chat_samples if mut_chat]
                 )
 
-                st.session_state.diff_urls = [raw_diff_urls.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]
+                st.session_state.diff_urls = [raw_diff_urls.pop(0) if mut_chat else None for mut_chat in st.session_state.mutated_chat_samples]
 
                 st.session_state.show_diff_urls = True
 
@@ -47,6 +47,8 @@ def get_diff_urls():
             label="Download all Diff Tool URLs (.txt)",
             data="\n".join([url if url else "null" for url in st.session_state.diff_urls]),
             file_name="diff_urls.txt",
+            type="tertiary",
+            icon="⬇️"
         )
 
     st.divider()

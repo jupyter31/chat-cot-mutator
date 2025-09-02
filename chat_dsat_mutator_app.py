@@ -8,6 +8,7 @@ from chat_dsat_mutator_controller import run_full_process
 from app_components.diff_urls import get_diff_urls
 from app_components.judge import run_hallucination_judge
 from app_components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
+from app_components.responses import regenerate_responses
 from app_components.results import display_individual_chat_sample_results, download_all
 from app_components.system_prompt import edit_system_prompt, init_system_prompt
 
@@ -99,7 +100,7 @@ valid_system_prompt = edit_system_prompt()
 
 # enabled submit button if inputs are valid and a mutation request has been provided
 disable_submit_button = (not valid_chat_samples) or (st.session_state.mutation_request == "") or (not valid_mutation_messages) or (st.session_state.chat_model.strip() == "") or (not valid_system_prompt)
-submit = st.button("Submit", disabled=disable_submit_button)
+submit = st.button("Submit", disabled=disable_submit_button, type="primary")
 
 st.divider()
 if submit:
@@ -128,9 +129,12 @@ if submit:
 
 if st.session_state.show_results:
 
+    # regenerate the assistant responses for the same mutated context
+    st.subheader("Regenerate responses")
+    regenerate_responses()
+
     # add download button for all mutated chat samples
     st.subheader("Mutated chat samples")
-    
     download_all()
 
     # generate and display URLs for Copilot Playground Diff Tool

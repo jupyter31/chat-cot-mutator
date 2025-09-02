@@ -22,18 +22,18 @@ def run_hallucination_judge():
     if st.button("Run hallucination judge", disabled=(not st.session_state.reasoning_model)):
         with st.spinner("Breaking responses into claims..."):
             try:
-                st.session_state.claims = run_claimbreak(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut])
+                st.session_state.claims = run_claimbreak(st.session_state.reasoning_model, [mut_chat for mut_chat in st.session_state.mutated_chat_samples if mut_chat])
                 st.session_state.claims = [claims if (claims and claims != "[]") else None for claims in st.session_state.claims]
             except Exception as e:
                 st.error(f"Error running claimbreak: {e}")
 
         with st.spinner("Scoring claims..."):
             try:
-                st.session_state.reasonings, st.session_state.mean_scores = run_score_all(st.session_state.reasoning_model, [mut for mut in st.session_state.mutated_chat_samples if mut], [claims for claims in st.session_state.claims if claims])
+                st.session_state.reasonings, st.session_state.mean_scores = run_score_all(st.session_state.reasoning_model, [mut_chat for mut_chat in st.session_state.mutated_chat_samples if mut_chat], [claims for claims in st.session_state.claims if claims])
 
-                st.session_state.claims = [st.session_state.claims.pop(0) if mut else None for mut in st.session_state.mutated_chat_samples]
-                st.session_state.reasonings = [st.session_state.reasonings.pop(0) if (mut and claims) else None for mut, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
-                st.session_state.mean_scores = [st.session_state.mean_scores.pop(0) if (mut and claims) else None for mut, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
+                st.session_state.claims = [st.session_state.claims.pop(0) if mut_chat else None for mut_chat in st.session_state.mutated_chat_samples]
+                st.session_state.reasonings = [st.session_state.reasonings.pop(0) if (mut_chat and claims) else None for mut_chat, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
+                st.session_state.mean_scores = [st.session_state.mean_scores.pop(0) if (mut_chat and claims) else None for mut_chat, claims in zip(st.session_state.mutated_chat_samples, st.session_state.claims)]
 
                 st.session_state.show_scores = True
 
@@ -46,12 +46,16 @@ def run_hallucination_judge():
             label="Download individual claim score reasoning (.jsonl)",
             data="\n".join(["null" if reasoning is None else json.dumps(reasoning) for reasoning in st.session_state.reasonings]),
             file_name="claim_score_reasoning.jsonl",
+            type="tertiary",
+            icon="⬇️"
         ) 
 
         st.download_button(
             label="Download the score all chat samples (.txt)",
             data="\n".join(["null" if mean_score is None else str(mean_score) for mean_score in st.session_state.mean_scores]),
             file_name="mean_chat_scores.txt",
+            type="tertiary",
+            icon="⬇️"
         ) 
 
     st.divider()

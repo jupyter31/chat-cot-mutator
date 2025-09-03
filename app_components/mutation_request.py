@@ -4,6 +4,19 @@ import streamlit as st
 from mutation_data import get_mutation_messages, Mutation, MUTATION_MAPPING, DEFAULT_MUTATION_CUSTOMISATIONS
 
 
+MUTATION_TOOLTIP = (
+    "- 'Claim-aligned deletion' deletes the claims from the context that have the greatest importance with regards to the assistant's reply.\n"
+    "- 'Salience drop' deletes the main content of the tool results, making it as if the files / emails were empty.\n"
+    "- 'Topic dilution' adds noise to the tool call results.\n"
+    "- 'Negated-evidence injection' replaces a passage with its negation such that it contradicts the original assistant response.\n"
+    "- 'Date / number jitter' swaps dates with different dates, and numbers with different numbers.\n"
+    "- 'Passage shuffle' randomises the order of tool call results or the order of passages within results.\n"
+    "- 'Entity swap' replaces entities with different entities of the same type. The entities used for swapping will be derived from the context of the chat sample.\n"
+    "- 'Unit-conversion rewrite' rewrites the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.\n"
+    "- 'Ablate URL links' removes all URLs from the tool call results."
+)
+
+
 def init_mutation_customisations():
     for mutation_type, params in DEFAULT_MUTATION_CUSTOMISATIONS.items():
         mut_str = mutation_type.name.lower()
@@ -33,7 +46,16 @@ def edit_mutation_messages():
         
 
 def get_mutation_request():
-    mutation_request_selectbox = st.selectbox("Select mutation type", MUTATION_MAPPING.keys(), format_func=lambda x:MUTATION_MAPPING[x], accept_new_options=False, index=None, on_change=lambda: st.session_state.update({"chat_index": 0}))
+    mutation_request_selectbox = st.selectbox(
+        "Select mutation type", 
+        MUTATION_MAPPING.keys(), 
+        format_func=lambda x:MUTATION_MAPPING[x], 
+        accept_new_options=False, 
+        index=None,
+        help=MUTATION_TOOLTIP,
+        on_change=lambda: st.session_state.update({"chat_index": 0})
+    )
+
     st.session_state.mutation_request = mutation_request_selectbox if mutation_request_selectbox is not None else st.text_input("Write your own mutation request", placeholder="e.g. 'Rewrite the chat sample with the dates swapped out for different dates.'").strip()
 
     # reset customisations and mutation messages to default values

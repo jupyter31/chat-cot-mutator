@@ -45,7 +45,7 @@ def get_mutation_messages(mutation_request, customisations=None):
 
     match mutation_request:
         case Mutation.CLAIM_ALIGNED_DELETION:
-            # Claim-aligned deletion involves deleting the the claims from the context that have the greatest importance with regards to the assistant's reply.
+            # 'Claim-aligned deletion' deletes the claims from the context that have the greatest importance with regards to the assistant's reply
 
             with open('prompts\\mutations\\claim_aligned_deletion.jsonl', 'r', encoding='utf-8') as f:
                 system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
@@ -59,25 +59,25 @@ def get_mutation_messages(mutation_request, customisations=None):
                 ]
             
         case Mutation.SALIENCE_DROP:
-            # Salience drop involves deleting the main content of the tool results, as if the files / emails were empty.
+            # 'Salience drop' deletes the main content of the tool results, making it as if the files / emails were empty
 
             with open('prompts\\mutations\\salience_drop.jsonl', 'r', encoding='utf-8') as f:
                 return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.TOPIC_DILUTION:
-            # Topic dilution involves adding noise to the tool call results.
+            # 'Topic dilution' adds noise to the tool call results.
 
             with open('prompts\\mutations\\topic_dilution.jsonl', 'r', encoding='utf-8') as f:
                 return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.NEGATED_EVIDENCE_INJECTION:
-            # Negated-evidence injection involves injecting a passage that contradicts the answer.
+            # 'Negated-evidence injection' replaces a passage with its negation such that it contradicts the original assistant response
 
             with open('prompts\\mutations\\negated_evidence_injection.jsonl', 'r', encoding='utf-8') as f:
                 return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.DATE_NUMBER_JITTER:
-            # Date / number jitter involves making date-swap and number-swap edits.
+            # 'Date / number jitter' swaps dates with different dates, and numbers with different numbers
 
             customisations["written_categories"] = (" and ").join(customisations["categories"])
 
@@ -101,13 +101,13 @@ def get_mutation_messages(mutation_request, customisations=None):
            
 
         case Mutation.PASSAGE_SHUFFLE:
-            # Passage shuffle randomises the passage order to test position bias.
+            # 'Passage shuffle' randomises the order of tool call results or the order of passages within results
 
             with open('prompts\\mutations\\passage_shuffle.jsonl', 'r', encoding='utf-8') as f:
                 return [json.loads(prompt) for prompt in f.read().strip().split("\n")]
 
         case Mutation.ENTITY_SWAP:
-            # Entity swapping involes replacing entities such as names, locations, dates, times, quantities with units, and organisations with a different entity of the same type, while keeping the context and meaning of the conversation intact.
+            # 'Entity swap' replaces entities with different entities of the same type. The entities used for swapping will be derived from the context of the chat sample
 
             customisations["written_entity_types"] = (", ").join(customisations["entity_types"])
 
@@ -128,7 +128,7 @@ def get_mutation_messages(mutation_request, customisations=None):
             ]
 
         case Mutation.UNIT_CONVERSION_REWRITE:
-            # Unit-conversion rewrite involves rewriting the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged.
+            # 'Unit-conversion rewrite' rewrites the chat sample to change the units of measurement to a different unit that measures the same type of quantity, while keeping the numerical values unchanged
 
             customisations["written_unit_types"] = (", ").join(customisations["unit_types"])
 
@@ -145,8 +145,7 @@ def get_mutation_messages(mutation_request, customisations=None):
             ]
 
         case Mutation.ABLATE_URL_LINKS:
-            # Ablate URL links involves removing all URLs from the chat sample.
-            # This means that the LLM does not have the the ability to access these information sources.
+            # 'Ablate URL links' removes all URLs from the tool call results
 
             if customisations["handling_choice"] == "remove":
                 customisations["instruction"] = "Remove all URLs, and adjust surrounding text to maintain grammatical correctness."
@@ -166,7 +165,7 @@ def get_mutation_messages(mutation_request, customisations=None):
             ]
 
         case _:
-            # Default case for free-form mutation requests
+            # default case for free-form mutation requests
 
             with open('prompts\\mutations\\free_form.jsonl', 'r', encoding='utf-8') as f:
                 system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]

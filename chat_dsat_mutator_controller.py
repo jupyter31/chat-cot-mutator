@@ -371,7 +371,7 @@ def run_claimbreak(model, mutated_chat_samples):
                     system_prompt,
                     {
                         "role": "user",
-                        "content": user_prompt["content"].replace("{{Utterance}}", user_query).replace("{{ModelResponse}}", assistant_reply)
+                        "content": user_prompt["content"].replace("{{user_query}}", user_query).replace("{{assistant_reply}}", assistant_reply)
                     }
                 ]
             }

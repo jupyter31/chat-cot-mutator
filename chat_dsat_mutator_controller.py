@@ -14,6 +14,7 @@ from mutation_data import Mutation, get_mutation_messages
 MAX_RETRY = 1
 
 # file paths for hallucination judge prompts
+APOLOGY_PROMPT_FILE = "prompts\\judge\\apology.jsonl"
 CLAIMBREAK_PROMPT_FILE = "prompts\\judge\\claimbreak.jsonl"
 SCORE_PROMPT_FILE = "prompts\\judge\\score_all.jsonl"
 
@@ -334,6 +335,59 @@ def run_full_process(model, chat_samples, mutation_request, customisations, syst
 
     return (mutated_chat_samples, mutation_messages, differences, responses, errors)
 
+def run_apology_judge(model, mutated_chat_samples):
+    """
+    Judges whether the assistant repsonse contains an apology.
+
+    Args:
+        model (str): The reasoning model to use for evaluating the grounding of the new responses.
+        mutated_chat_samples (list<dict>): The mutated chat samples.
+
+    Returns:
+        apology_classifications (list<dict>): The breakdown of claims from the new responses.
+    """
+    print()
+    print("Running apology judge...")
+    # read apology prompts from file
+    with open(APOLOGY_PROMPT_FILE, 'r', encoding='utf-8') as f:
+        system_prompt, user_prompt = [json.loads(prompt) for prompt in f.read().strip().split("\n")]
+
+    claimbreak_requests = []
+    for chat in mutated_chat_samples:
+
+        if chat["messages"][0]["role"] == "user":
+            user_query = chat["messages"][0]["content"]
+        else:
+            raise Exception("No user utterance found in mutated chat sample.")
+
+        if chat["messages"][0]["role"] == "user" and chat["messages"][-1]["role"] == "assistant":
+            search_results = chat["messages"][1:-1] if len(chat["messages"]) > 2 else []
+        else:
+            raise Exception("The user utterance and/or the assistant response was not found in mutated chat sample.")
+        
+        if chat["messages"][-1]["role"] == "assistant":
+            assistant_reply = chat["messages"][-1]["content"]
+        else:
+            raise Exception("No assistant response found in mutated chat sample.")
+        
+        claimbreak_requests.append(
+            {
+                "messages": [
+                    system_prompt,
+                    {
+                        "role": "user",
+                        "content": user_prompt["content"]
+                            .replace("{{user_query}}", user_query)
+                            .replace("{{search_results}}", json.dumps(search_results))
+                            .replace("{{assistant_reply}}", assistant_reply)
+                    }
+                ]
+            }
+        )
+
+    apology_classifications = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
+
+    return apology_classifications
 
 def run_claimbreak(model, mutated_chat_samples):
     """
@@ -371,11 +425,14 @@ def run_claimbreak(model, mutated_chat_samples):
                     system_prompt,
                     {
                         "role": "user",
-                        "content": user_prompt["content"].replace("{{user_query}}", user_query).replace("{{assistant_reply}}", assistant_reply)
+                        "content": user_prompt["content"]
+                            .replace("{{user_query}}", user_query)
+                            .replace("{{assistant_reply}}", assistant_reply)
                     }
                 ]
             }
         )
+
     claims = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
 
     return claims
@@ -414,7 +471,9 @@ def run_score_all(model, mutated_chat_samples, claims):
                     system_prompt,
                     {
                         "role": "user",
-                        "content": user_prompt["content"].replace("{{search_results}}", json.dumps(search_results)).replace("{{claims}}", json.dumps(claim))
+                        "content": user_prompt["content"]
+                            .replace("{{search_results}}", json.dumps(search_results))
+                            .replace("{{claims}}", json.dumps(claim))
                     }
                 ]
             }

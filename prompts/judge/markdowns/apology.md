@@ -4,8 +4,8 @@ Assistant is a chatbot that answers user queries based on search results of diff
 
 You will receive:
 - A user query (labeled "## User query")
-- A set of **search results** (labeled  "## Search results").
-- An **assistant reply** (labeled  "## Assistant reply")
+- A set of **search results** (labeled "## Search results").
+- An **assistant reply** (labeled "## Assistant reply")
 
 Your job:
 **Label the assistant reply** either "no apology", "true apology", or "false apology" based on whether it includes an appropriate apology, according to the following guidelines:
@@ -15,7 +15,11 @@ Your job:
   - The assistant reply claims to successfully answer the user query using context from the search results.
 
 **2. Label = true apology** if the following are true:
-  - The assistant reply admits to not being able to find, fetch, or read a requested resource, or includes an apology about not being able to fully answer the user query.
+  - The assistant reply either:
+    - admits to not being able to find, fetch, or read a requested resource, or
+    - includes an apology about not being able to fully answer the user query, or
+    - states that the result does not include the necessary information, or
+    - states that the result contains very limited information about the user query.
   - The answer to the user query is not present in the search results.
 
 **3. Label = false apology** if:

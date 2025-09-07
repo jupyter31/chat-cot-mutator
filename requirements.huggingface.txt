@@ -1,0 +1,20 @@
+# Requirements for using Hugging Face models (like Phi)
+# Install with: pip install -r requirements.huggingface.txt
+
+# Core ML dependencies
+torch>=2.0.0
+transformers>=4.35.0
+
+# Optional but recommended for better performance
+accelerate>=0.20.0
+flash-attn>=2.0.0  # For faster attention (requires CUDA)
+
+# For efficient model loading and memory management
+bitsandbytes>=0.41.0  # For quantization (optional)
+safetensors>=0.3.0
+
+# Model-specific optimizations
+optimum>=1.14.0  # For ONNX and other optimizations (optional)
+
+# Note: Flash attention requires CUDA and may need specific torch versions
+# If you encounter issues with flash-attn, you can skip it and use standard attention

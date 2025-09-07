@@ -52,6 +52,27 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Anthropic client requires 'anthropic' package. Install with: pip install anthropic"
             )
     
+    elif provider == "huggingface" or provider == "phi":
+        try:
+            from .huggingface_client import HuggingFaceClient, Phi2Client, Phi3Client
+            
+            # Handle specific Phi model requests
+            if provider == "phi":
+                model_name = kwargs.get("model_name", "phi-2")
+                if "phi-2" in model_name.lower():
+                    return Phi2Client(**{k: v for k, v in kwargs.items() if k != "model_name"})
+                elif "phi-3" in model_name.lower():
+                    model_size = kwargs.get("model_size", "mini")
+                    return Phi3Client(model_size=model_size, **{k: v for k, v in kwargs.items() if k not in ["model_name", "model_size"]})
+                else:
+                    return HuggingFaceClient(model_name=model_name, **{k: v for k, v in kwargs.items() if k != "model_name"})
+            else:
+                return HuggingFaceClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "Hugging Face client requires 'torch' and 'transformers' packages. Install with: pip install torch transformers"
+            )
+    
     elif provider == "microsoft":
         try:
             from .llm_api import MicrosoftLLMClient
@@ -64,7 +85,7 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
     else:
         raise ValueError(
             f"Unsupported provider: {provider}. "
-            f"Supported providers: openai, anthropic, microsoft"
+            f"Supported providers: openai, anthropic, microsoft, huggingface, phi"
         )
 
 
@@ -100,8 +121,15 @@ def get_default_client() -> BaseLLMClient:
         except ImportError:
             pass
     
+    # Try Hugging Face/Phi as fallback (works offline)
+    try:
+        return create_llm_client("phi", model_name="phi-2")  # Default to Phi-2 as it's smaller
+    except ImportError:
+        pass
+    
     raise RuntimeError(
         "No LLM client available. Please install required packages and set API keys:\n"
         "- OpenAI: pip install openai && export OPENAI_API_KEY=your_key\n"
-        "- Anthropic: pip install anthropic && export ANTHROPIC_API_KEY=your_key"
+        "- Anthropic: pip install anthropic && export ANTHROPIC_API_KEY=your_key\n"
+        "- Hugging Face: pip install torch transformers (works offline)"
     )

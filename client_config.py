@@ -82,6 +82,70 @@ def get_microsoft_internal_client():
     )
 
 
+def get_phi2_client():
+    """
+    Get Phi-2 client configuration (runs locally)
+    
+    Requirements:
+    - pip install torch transformers
+    - ~6GB of GPU memory or CPU with sufficient RAM
+    
+    Example usage in controller:
+        from client_config import get_phi2_client
+        llm_client = get_phi2_client()
+    """
+    return create_llm_client(
+        "phi",
+        model_name="phi-2",
+        device="auto"  # Will use GPU if available, otherwise CPU
+    )
+
+
+def get_phi3_client(model_size="mini"):
+    """
+    Get Phi-3 client configuration (runs locally)
+    
+    Args:
+        model_size: "mini" (4K context), "small" (8K context), or "medium" (4K context)
+    
+    Requirements:
+    - pip install torch transformers
+    - 8-16GB+ GPU memory depending on model size
+    
+    Example usage in controller:
+        from client_config import get_phi3_client
+        llm_client = get_phi3_client("mini")  # or "small", "medium"
+    """
+    return create_llm_client(
+        "phi",
+        model_name="phi-3",
+        model_size=model_size,
+        device="auto"
+    )
+
+
+def get_custom_huggingface_client(model_name="microsoft/DialoGPT-medium"):
+    """
+    Get a custom Hugging Face model client
+    
+    Args:
+        model_name: Any Hugging Face causal language model
+    
+    Requirements:
+    - pip install torch transformers
+    - Sufficient memory for the chosen model
+    
+    Example usage in controller:
+        from client_config import get_custom_huggingface_client
+        llm_client = get_custom_huggingface_client("microsoft/DialoGPT-large")
+    """
+    return create_llm_client(
+        "huggingface",
+        model_name=model_name,
+        device="auto"
+    )
+
+
 # Default client selection priority:
 # 1. Microsoft internal (for internal Microsoft users)
 # 2. OpenAI (if OPENAI_API_KEY is set)

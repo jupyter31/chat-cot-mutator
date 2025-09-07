@@ -9,6 +9,7 @@ The application supports multiple LLM providers through a unified interface. You
 - **Microsoft Internal API** (default for Microsoft employees)
 - **OpenAI API** (including Azure OpenAI)
 - **Anthropic Claude API**
+- **Hugging Face Models** (including Microsoft Phi models - runs locally)
 
 ## Provider Setup
 
@@ -70,7 +71,43 @@ from client_config import get_anthropic_client
 llm_client = get_anthropic_client()
 ```
 
-### 4. Microsoft Internal (Current Default)
+### 4. Microsoft Phi Models (Local/Offline)
+
+**Installation:**
+```bash
+pip install torch transformers
+# Optional for better performance:
+pip install accelerate flash-attn
+```
+
+**No API keys required** - models run locally on your hardware.
+
+**Configuration for Phi-2 (smaller, faster):**
+```python
+# In chat_dsat_mutator_controller.py, replace the import:
+from client_config import get_phi2_client
+llm_client = get_phi2_client()
+```
+
+**Configuration for Phi-3 (larger, more capable):**
+```python
+# In chat_dsat_mutator_controller.py, replace the import:
+from client_config import get_phi3_client
+llm_client = get_phi3_client("mini")  # Options: "mini", "small", "medium"
+```
+
+**Hardware Requirements:**
+- **Phi-2**: ~6GB RAM or GPU memory
+- **Phi-3 Mini**: ~8GB RAM or GPU memory
+- **Phi-3 Small/Medium**: 16GB+ RAM or GPU memory
+
+**Advantages:**
+- No API costs or rate limits
+- Works completely offline
+- Privacy - no data leaves your machine
+- Good performance for many tasks
+
+### 5. Microsoft Internal (Current Default)
 
 This is the current implementation that uses Microsoft's internal LLM API. It requires:
 - Internal Microsoft dependencies (`msal`, etc.)
@@ -141,6 +178,10 @@ deepdiff>=6.0.0
 openai>=1.3.0  # For OpenAI API
 anthropic>=0.8.0  # For Anthropic API
 
+# For local Hugging Face models (Phi, etc.)
+torch>=2.0.0  # For local AI models
+transformers>=4.35.0  # For local AI models
+
 # Note: Microsoft internal dependencies (msal, etc.) are not included
 # These will only be available in the internal version
 ```
@@ -162,3 +203,4 @@ Different providers use different model names. Update your model references acco
 - **OpenAI**: `gpt-4`, `gpt-3.5-turbo`, `gpt-4-turbo`
 - **Anthropic**: `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307`
 - **Azure OpenAI**: Use your deployed model names
+- **Hugging Face**: `phi-2`, `phi-3`, or any HuggingFace model name (e.g., `microsoft/phi-2`)

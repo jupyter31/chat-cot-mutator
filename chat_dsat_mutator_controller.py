@@ -5,7 +5,10 @@ import random
 import re
 
 from clients.foundry import foundry_client
-from clients.llm_api import llm_api_client
+from clients.client_factory import get_default_client
+
+# Get the default LLM client
+llm_client = get_default_client()
 
 from mutation_data import Mutation, get_mutation_messages
 
@@ -73,7 +76,7 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
         requests.append(request)
 
     # send the requests to the LLM API
-    responses = llm_api_client.send_batch_chat_request(model, requests)
+    responses = llm_client.send_batch_chat_request(model, requests)
 
     # retry response generation for any responses that are None
     retry = MAX_RETRY
@@ -83,7 +86,7 @@ def generate_responses(model, system_prompt, mutated_chat_samples):
             break
 
         retry_requests = [requests[i] for i in failed_indices]
-        retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+        retry_responses = llm_client.send_batch_chat_request(model, retry_requests)
 
         for i, retry_response in enumerate(retry_responses):
             if retry_response is not None:
@@ -236,7 +239,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
         )
 
     # send the requests to the LLM API
-    responses = llm_api_client.send_batch_chat_request(model, requests)
+    responses = llm_client.send_batch_chat_request(model, requests)
     safe_responses = get_safe_responses(responses)
 
     mutated_chat_samples = []
@@ -249,7 +252,7 @@ def mutate_chat_samples(model, chat_samples, mutation_request, customisations, m
             break
 
         retry_requests = [requests[i] for i in failed_indices]
-        retry_responses = llm_api_client.send_batch_chat_request(model, retry_requests)
+        retry_responses = llm_client.send_batch_chat_request(model, retry_requests)
         safe_retry_resposes = get_safe_responses(retry_responses)
 
         for i, retry_response in zip(failed_indices, safe_retry_resposes):
@@ -385,7 +388,7 @@ def run_apology_judge(model, mutated_chat_samples):
             }
         )
 
-    apology_classifications = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
+    apology_classifications = llm_client.send_batch_chat_request(model, claimbreak_requests)
 
     return apology_classifications
 
@@ -433,7 +436,7 @@ def run_claimbreak(model, mutated_chat_samples):
             }
         )
 
-    claims = llm_api_client.send_batch_chat_request(model, claimbreak_requests)
+    claims = llm_client.send_batch_chat_request(model, claimbreak_requests)
 
     return claims
 
@@ -479,7 +482,7 @@ def run_score_all(model, mutated_chat_samples, claims):
             }
         )
 
-    reasoning_and_scores = llm_api_client.send_batch_chat_request(model, score_all_requests)
+    reasoning_and_scores = llm_client.send_batch_chat_request(model, score_all_requests)
 
     reasonings = []
     average_scores = []

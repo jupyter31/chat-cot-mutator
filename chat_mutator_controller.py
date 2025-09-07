@@ -4,7 +4,6 @@ import json
 import random
 import re
 
-from clients.foundry import foundry_client
 from clients.client_factory import get_default_client
 
 # Get the default LLM client
@@ -137,32 +136,6 @@ def get_safe_responses(responses):
             safe_responses.append(None)
 
     return safe_responses
-
-
-def call_foundry_client(foundry_token, chat_samples, mutated_chat_samples):
-    """
-    Returns the URLs of the differences between the original and mutated chat samples.
-
-    Args:
-        foundry_token (str): The Foundry token to use for authentication.
-        chat_samples (list<dict>): The original chat samples.
-        mutated_chat_samples (list<dict>): The mutated chat samples.
-
-    Returns:
-        list<str>: The URLs of the differences between the original and mutated chat samples.
-    """
-    diff_urls = []
-    for chat_sample, mutated_chat_sample in zip(chat_samples, mutated_chat_samples):
-        diff_url = foundry_client.save_diff(
-            foundry_token,
-            json.dumps(chat_sample, indent=2),
-            json.dumps(mutated_chat_sample, indent=2),
-            "Original chat sample", 
-            "Mutated chat sample",
-        )
-        diff_urls.append(diff_url)
-
-    return diff_urls
 
 
 def is_json_valid(s):

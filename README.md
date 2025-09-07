@@ -1,5 +1,6 @@
-# chat-dsat-mutator
+# chat-mutator
 [Work in Progress]
+
 ## Install dependencies
 - Install Python version 3.12 on your system
 - Create a virtual environment in the workspace:
@@ -31,7 +32,7 @@
 To run the Streamlit app, enter the following command:
 
 ```powershell
-streamlit run .\chat_dsat_mutator_app.py
+streamlit run .\chat_mutator_app.py
 ```
 The termimal should display a message indicating that you can now view the Streamlit app in your browser. Navigate to the `Local URL` listed below that message.
 
@@ -57,3 +58,7 @@ It may take some time for the chat samples to be processed and for the results t
 
 
 ![results-display](./images/results-display.png)
+
+
+## Acknowledgements
+Significant portion of this code was developed by Jess Peck during her internship at Microsoft.

@@ -1,6 +1,6 @@
 import streamlit as st
 
-from chat_dsat_mutator_controller import add_new_responses_to_mutated_chat_samples, generate_responses, MAX_RETRY
+from chat_mutator_controller import add_new_responses_to_mutated_chat_samples, generate_responses, MAX_RETRY
 
 def regenerate_responses():
     st.write("This will regenerate the assistant responses for the same mutated context.")

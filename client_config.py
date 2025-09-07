@@ -1,7 +1,7 @@
 # LLM Client Configuration
 # 
 # This file demonstrates how to configure different LLM providers for the chat-dsat-mutator.
-# You can modify the client initialization in chat_dsat_mutator_controller.py to use these
+# You can modify the client initialization in chat_mutator_controller.py to use these
 # configurations instead of the default client.
 
 import os
@@ -151,7 +151,7 @@ def get_custom_huggingface_client(model_name="microsoft/DialoGPT-medium"):
 # 2. OpenAI (if OPENAI_API_KEY is set)
 # 3. Anthropic (if ANTHROPIC_API_KEY is set)
 # 
-# To use a specific client, modify the import in chat_dsat_mutator_controller.py:
+# To use a specific client, modify the import in chat_mutator_controller.py:
 # 
 # Replace:
 #   from clients.client_factory import get_default_client

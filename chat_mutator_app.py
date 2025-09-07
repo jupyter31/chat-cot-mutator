@@ -4,7 +4,7 @@ import time
 
 from mutation_data import Mutation
 
-from chat_dsat_mutator_controller import run_full_process
+from chat_mutator_controller import run_full_process
 from app_components.diff_urls import get_diff_urls
 from app_components.judge import run_hallucination_judge
 from app_components.mutation_request import init_mutation_customisations, edit_mutation_messages, get_mutation_request
@@ -20,7 +20,7 @@ def init_session_state(default_states):
             st.session_state[state] = default
 
 
-st.set_page_config(layout="centered", page_title="Chat DSAT Mutator", page_icon=":nerd_face:")
+st.set_page_config(layout="centered", page_title="Chat Mutator", page_icon=":nerd_face:")
            
 init_session_state({
     "chat_index": 0,

@@ -141,7 +141,7 @@ if __name__ == "__main__":
     print("\n=== Testing Complete ===")
     print("\nTo use Phi models in your chat-dsat-mutator:")
     print("1. Install dependencies: pip install torch transformers")
-    print("2. Modify chat_dsat_mutator_controller.py:")
+    print("2. Modify chat_mutator_controller.py:")
     print("   from client_config import get_phi2_client")
     print("   llm_client = get_phi2_client()")
     print("3. Run your application normally!")

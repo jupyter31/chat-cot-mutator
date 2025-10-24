@@ -1,0 +1,241 @@
+"""Headless batch runner for Chain-of-Thought mutation experiments."""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - fallback for environments without PyYAML
+    yaml = None
+
+from clients.replay_tool_client import ReplayToolClient
+from core.pipeline import PromptTemplates, run_condition
+from core.schema import SampleRecord, load_jsonl
+from eval.metrics import (
+    compute_metrics_by_mutation,
+    compute_overall_metrics,
+    token_latency_rows,
+)
+PROMPT_CONDITIONS = ["A", "B", "C", "D"]
+
+
+def _load_prompts(root: Path) -> PromptTemplates:
+    templates: Dict[str, str] = {}
+    for condition in PROMPT_CONDITIONS:
+        prompt_path = root / "prompts" / "conditions" / f"{condition}.txt"
+        templates[condition] = prompt_path.read_text(encoding="utf-8")
+    return PromptTemplates(templates)
+
+
+def _load_config(path: Optional[str]) -> Dict[str, Any]:
+    if path is None:
+        return {}
+    config_path = Path(path)
+    if not config_path.exists():
+        raise FileNotFoundError(config_path)
+    text = config_path.read_text(encoding="utf-8")
+    if yaml is not None:
+        data = yaml.safe_load(text)
+        return data or {}
+    # very small YAML subset fallback: key: value per line
+    config: Dict[str, Any] = {}
+    for line in text.splitlines():
+        if not line or line.strip().startswith("#"):
+            continue
+        key, _, value = line.partition(":")
+        config[key.strip()] = value.strip()
+    return config
+
+
+def _resolve_conditions(value: Optional[str]) -> List[str]:
+    if value is None:
+        return PROMPT_CONDITIONS
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _determine_mutation(sample: SampleRecord, policy: str, idx: int) -> Optional[str]:
+    policy = policy or "pivotal"
+    if policy == "pivotal":
+        return sample.mutation_directive
+    if policy == "control":
+        options = ["Paraphrase()", "Reorder()"]
+        return options[idx % len(options)]
+    if policy == "none":
+        return None
+    raise ValueError(f"Unknown mutation policy: {policy}")
+
+
+def _create_model_client(model_spec: str):
+    provider = model_spec
+    model_name = model_spec
+    if ":" in model_spec:
+        provider, model_name = model_spec.split(":", 1)
+    client = None
+    try:
+        import client_config
+
+        getter_name = f"get_{provider}_client"
+        if hasattr(client_config, getter_name):
+            client = getattr(client_config, getter_name)()
+    except ImportError:
+        client = None
+
+    if client is None:
+        from clients.client_factory import create_llm_client
+
+        client = create_llm_client(provider)
+    return client, model_name
+
+
+def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, Any]:
+    repo_root = Path(__file__).resolve().parent.parent
+    prompts = _load_prompts(repo_root)
+    input_path = Path(config["input"])
+    samples = load_jsonl(input_path)
+    max_samples = int(config.get("max_samples", 0) or 0)
+    if max_samples:
+        samples = samples[:max_samples]
+    conditions = config.get("conditions")
+    if isinstance(conditions, str):
+        conditions = _resolve_conditions(conditions)
+    elif not conditions:
+        conditions = PROMPT_CONDITIONS
+
+    output_dir = Path(config["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    model_spec = config.get("model", "openai:gpt-4o")
+    if model_client is None:
+        model_client, resolved_model_name = _create_model_client(model_spec)
+    else:
+        resolved_model_name = model_spec.split(":", 1)[1] if ":" in model_spec else model_spec
+
+    temperature = float(config.get("temperature", 0.0))
+    seed = config.get("seed")
+    seed_value = int(seed) if seed is not None else None
+    judge_mode = config.get("judge", "prog")
+    mutation_policy = config.get("mutation_policy", "pivotal")
+
+    all_results: List[Dict[str, Any]] = []
+
+    for idx, sample in enumerate(samples):
+        replay_client = ReplayToolClient(sample.frozen_context.tool_outputs)
+        mutation_override = _determine_mutation(sample, mutation_policy, idx)
+        for condition in conditions:
+            replay_client.reset()
+            judge_client = None
+            judge_model = None
+            if judge_mode == "llm":
+                judge_client = model_client
+                judge_model = resolved_model_name
+            result = run_condition(
+                sample,
+                condition,
+                model_client,
+                replay_client,
+                prompts,
+                model_name=resolved_model_name,
+                temperature=temperature,
+                seed=seed_value,
+                mutation_override=mutation_override,
+                judge_client=judge_client,
+                judge_model=judge_model,
+            )
+            result["run_seed"] = seed_value
+            result["temperature"] = temperature
+            result["judge_mode"] = judge_mode
+            all_results.append(result)
+
+    samples_jsonl = output_dir / "samples.jsonl"
+    with samples_jsonl.open("w", encoding="utf-8") as f:
+        for record in all_results:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    metrics_overall = compute_overall_metrics(all_results)
+    (output_dir / "metrics_overall.json").write_text(
+        json.dumps(metrics_overall, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    metrics_mutation = compute_metrics_by_mutation(all_results)
+    (output_dir / "metrics_by_mutation.json").write_text(
+        json.dumps(metrics_mutation, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    token_rows = token_latency_rows(all_results)
+    with (output_dir / "tokens_latency.csv").open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=[
+                "sample_id",
+                "condition",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "latency_s",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(token_rows)
+
+    return {
+        "results": all_results,
+        "metrics_overall": metrics_overall,
+        "metrics_by_mutation": metrics_mutation,
+        "output_dir": str(output_dir),
+    }
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Headless runner for chat-cot-mutator experiments.")
+    parser.add_argument("--config", help="Path to YAML config file", default=None)
+    parser.add_argument("--input", help="Path to input samples JSONL")
+    parser.add_argument("--output_dir", help="Directory to write outputs")
+    parser.add_argument("--model", help="Model spec provider:model_name", default="openai:gpt-4o")
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--conditions", help="Comma separated conditions", default=None)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--judge", choices=["prog", "llm"], default="prog")
+    parser.add_argument("--mutation_policy", choices=["pivotal", "control", "none"], default="pivotal")
+    parser.add_argument("--max_samples", type=int, default=0)
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    args = parse_args(argv)
+    config = _load_config(args.config)
+
+    cli_overrides = {
+        "input": args.input or config.get("input"),
+        "output_dir": args.output_dir or config.get("output_dir"),
+        "model": args.model or config.get("model"),
+        "temperature": args.temperature if args.temperature is not None else config.get("temperature"),
+        "seed": args.seed if args.seed is not None else config.get("seed"),
+        "conditions": args.conditions or config.get("conditions"),
+        "batch_size": args.batch_size,
+        "judge": args.judge or config.get("judge"),
+        "mutation_policy": args.mutation_policy or config.get("mutation_policy"),
+        "max_samples": args.max_samples or config.get("max_samples"),
+    }
+
+    # merge config with overrides, preferring CLI values when provided
+    merged = dict(config)
+    merged.update({k: v for k, v in cli_overrides.items() if v is not None})
+
+    missing = [key for key in ["input", "output_dir"] if not merged.get(key)]
+    if missing:
+        raise SystemExit(f"Missing required configuration values: {', '.join(missing)}")
+
+    run_experiment(merged)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

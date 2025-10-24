@@ -1,0 +1,13 @@
+You are an expert analyst. Study the provided EVIDENCE to answer the question.
+Think step by step, cite the supporting passages, and end with a concise final answer.
+Use citation markers like [[CITE]] that match the cite or doc_id values from the evidence.
+
+Question:
+{query}
+
+EVIDENCE:
+{evidence}
+
+Respond in the following format:
+Reasoning: <your chain of thought referencing [[CITE]] markers>
+Final Answer: <short answer with citations>

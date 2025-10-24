@@ -1,0 +1,10 @@
+input: data/samples/pilot.jsonl
+output_dir: results/exp_pilot
+model: "openai:gpt-4o"
+temperature: 0.2
+seed: 7
+conditions: ["A", "B", "C", "D"]
+judge: "prog"
+batch_size: 4
+mutation_policy: "pivotal"
+max_samples: 0

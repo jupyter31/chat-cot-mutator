@@ -36,6 +36,20 @@ streamlit run .\chat_mutator_app.py
 ```
 The termimal should display a message indicating that you can now view the Streamlit app in your browser. Navigate to the `Local URL` listed below that message.
 
+## Headless runner
+
+The repository also ships with a reproducible, headless runner that mirrors the paper's four experimental conditions (A–D). To launch the smoke-test configuration run:
+
+```powershell
+python tools/runner.py --config configs/exp_pilot.yaml
+```
+
+This command processes the frozen samples in `data/samples/pilot.jsonl`, writes model generations to `results/exp_pilot/samples.jsonl`, and aggregates metrics in `metrics_overall.json`, `metrics_by_mutation.json`, and `tokens_latency.csv`.
+
+### Interpreting outputs
+
+Open `results/exp_pilot/metrics_overall.json` to review the Attributed Accuracy (AAd), ACE, and other headline numbers for the run. Per-mutation breakdowns are stored in `metrics_by_mutation.json`, and token/latency accounting lives in `tokens_latency.csv`.
+
 ## Use the Synthetic Chat-Data Mutation Framework
 1. Upload a JSONL file of chat samples, or copy and paste the chat samples into the text area.
 2. Select a predefined mutation type, or write your own mutation request.

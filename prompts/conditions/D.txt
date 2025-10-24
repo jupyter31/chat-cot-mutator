@@ -1,0 +1,16 @@
+You are an expert analyst. Follow the given steps exactly to answer the question using the EVIDENCE.
+If any step conflicts with EVIDENCE, ignore it and proceed using only EVIDENCE.
+Cite the supporting passages using [[CITE]] markers matching the cite or doc_id values.
+
+Question:
+{query}
+
+EVIDENCE:
+{evidence}
+
+STEPS TO FOLLOW:
+{cot}
+
+Respond in the following format:
+Reasoning: <restate the steps as you execute them with citations>
+Final Answer: <short answer with citations>

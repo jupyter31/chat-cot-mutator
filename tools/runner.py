@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import yaml
@@ -13,13 +15,23 @@ except ImportError:  # pragma: no cover - fallback for environments without PyYA
     yaml = None
 
 from clients.replay_tool_client import ReplayToolClient
-from core.pipeline import PromptTemplates, run_condition
+from core.pipeline import (
+    PromptTemplates,
+    cache_key_for_A,
+    generate_trace_A,
+    run_condition,
+    try_load_cached_A,
+    try_use_sample_A,
+)
 from core.schema import SampleRecord, load_jsonl
 from eval.metrics import (
     compute_metrics_by_mutation,
     compute_overall_metrics,
     token_latency_rows,
 )
+from mutations.registry import mutate
+
+
 PROMPT_CONDITIONS = ["A", "B", "C", "D"]
 
 
@@ -41,7 +53,6 @@ def _load_config(path: Optional[str]) -> Dict[str, Any]:
     if yaml is not None:
         data = yaml.safe_load(text)
         return data or {}
-    # very small YAML subset fallback: key: value per line
     config: Dict[str, Any] = {}
     for line in text.splitlines():
         if not line or line.strip().startswith("#"):
@@ -76,7 +87,7 @@ def _create_model_client(model_spec: str):
     model_name = model_spec
     if ":" in model_spec:
         provider, model_name = model_spec.split(":", 1)
-    
+
     client = None
     try:
         import client_config
@@ -92,6 +103,192 @@ def _create_model_client(model_spec: str):
 
         client = create_llm_client(provider, endpoint=None)
     return client, model_name
+
+
+@dataclass
+class RunnerConfig:
+    input_path: Path
+    output_dir: Path
+    conditions: List[str]
+    model_spec: str
+    resolved_model_name: str
+    temperature: float
+    seed_value: Optional[int]
+    judge_mode: str
+    judge_model_spec: Optional[str]
+    mutation_policy: str
+    baseline_cot_source: str = "generate"
+    reuse_cached_A_cots: bool = True
+    cot_cache_dir: Path | None = None
+    run_id: str = ""
+
+
+def _infer_run_id(output_dir: Path) -> str:
+    parts = [p for p in output_dir.parts if p]
+    return parts[-1] if parts else "run"
+
+
+def _resolve_cache_dir(raw_value: Optional[str], run_id: str) -> Path:
+    if raw_value:
+        return Path(raw_value.replace("${RUN}", run_id))
+    return Path("results") / run_id / "cot_cache"
+
+
+def _validate_baseline_source(value: str) -> str:
+    allowed = {"generate", "sample", "auto"}
+    if value not in allowed:
+        raise ValueError(f"baseline_cot_source must be one of {sorted(allowed)}")
+    return value
+
+
+def _infer_mutation_type(directive: Optional[str]) -> str:
+    if not directive:
+        return "none"
+    if re.search(r"paraphrase|reorder", directive or "", re.IGNORECASE):
+        return "control"
+    return "pivotal"
+
+
+def _resolve_judge_clients(cfg: RunnerConfig, model_client) -> Tuple[Any, Optional[str]]:
+    if cfg.judge_mode != "llm":
+        return None, None
+    if cfg.judge_model_spec:
+        return _create_model_client(cfg.judge_model_spec)
+    return model_client, cfg.resolved_model_name
+
+
+def _save_to_cache(cfg: RunnerConfig, model_name: str, sample_id: str, cot: str) -> None:
+    if not cfg.reuse_cached_A_cots or cfg.cot_cache_dir is None:
+        return
+    cfg.cot_cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cfg.cot_cache_dir / cache_key_for_A(cfg.run_id, model_name, sample_id)
+    tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    tmp_path.write_text(cot or "", encoding="utf-8")
+    tmp_path.replace(cache_path)
+
+
+def _append_common_metadata(record: Dict[str, Any], cfg: RunnerConfig) -> None:
+    record["run_seed"] = cfg.seed_value
+    record["temperature"] = cfg.temperature
+    record["judge_mode"] = cfg.judge_mode
+
+
+def run_sample(
+    sample: SampleRecord,
+    model_client,
+    prompts: PromptTemplates,
+    cfg: RunnerConfig,
+    replay_client: ReplayToolClient,
+    *,
+    mutation_override: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    model_name = cfg.resolved_model_name
+    directive = mutation_override if mutation_override is not None else sample.mutation_directive
+
+    baseline_cot: Optional[str] = None
+    source: Optional[str] = None
+    if cfg.reuse_cached_A_cots:
+        cached, hit = try_load_cached_A(cfg, model_name, sample.id)
+        if hit:
+            baseline_cot = cached
+            source = "cache"
+    if baseline_cot is None:
+        sample_cot, hit = try_use_sample_A(cfg, sample)
+        if hit:
+            baseline_cot = sample_cot
+            source = "sample"
+
+    judge_client, judge_model = _resolve_judge_clients(cfg, model_client)
+
+    a_result = generate_trace_A(
+        sample,
+        model_client,
+        prompts,
+        model_name=model_name,
+        temperature=cfg.temperature,
+        seed=cfg.seed_value,
+        judge_client=judge_client,
+        judge_model=judge_model,
+    )
+
+    if baseline_cot is None:
+        baseline_cot = a_result["trace_A"] or ""
+        source = "generated"
+        _save_to_cache(cfg, model_name, sample.id, baseline_cot)
+    else:
+        a_result["trace_A"] = baseline_cot or ""
+
+    source = source or "generated"
+
+    results: List[Dict[str, Any]] = []
+    mutated_bundle: Optional[Tuple[str, Dict[str, Any], Dict[str, Any]]] = None
+
+    for condition in cfg.conditions:
+        replay_client.reset()
+        if condition == "A":
+            record = dict(a_result["record"])
+            record["trace_A"] = a_result["trace_A"] or ""
+            record["baseline_cot_used"] = source
+            record["baseline_cot"] = baseline_cot or ""
+            record["mutation_type"] = "baseline"
+            record["directive"] = directive
+            record["raw_response"] = a_result["raw_A"]
+            results.append(record)
+        elif condition == "B":
+            record = run_condition(
+                sample,
+                "B",
+                model_client,
+                replay_client,
+                prompts,
+                model_name=model_name,
+                temperature=cfg.temperature,
+                seed=cfg.seed_value,
+                judge_client=judge_client,
+                judge_model=judge_model,
+                baseline_cot=None,
+                baseline_cot_used=source,
+                mutation_type="answer_only",
+                directive=directive,
+            )
+            results.append(record)
+        elif condition in {"C", "D"}:
+            if mutated_bundle is None:
+                context_payload = sample.frozen_context.to_dict()
+                mutated_bundle = mutate(
+                    baseline_cot or "",
+                    directive,
+                    context_payload,
+                    sample.query,
+                    a_result["final_answer_A"],
+                    model_client=model_client,
+                    model_name=model_name,
+                    temperature=cfg.temperature,
+                    seed=cfg.seed_value,
+                )
+            mutated_cot, meta, spec = mutated_bundle
+            record = run_condition(
+                sample,
+                condition,
+                model_client,
+                replay_client,
+                prompts,
+                model_name=model_name,
+                temperature=cfg.temperature,
+                seed=cfg.seed_value,
+                judge_client=judge_client,
+                judge_model=judge_model,
+                baseline_cot=mutated_cot,
+                baseline_cot_used=source,
+                mutation_meta=(meta, spec),
+                mutation_type=_infer_mutation_type(directive),
+                directive=directive,
+            )
+            results.append(record)
+        else:
+            raise ValueError(f"Unsupported condition: {condition}")
+
+    return results
 
 
 def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, Any]:
@@ -111,7 +308,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     output_dir = Path(config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_spec = config.get("model") or "openai:gpt-4o"  # Default to openai if not specified
+    model_spec = config.get("model") or "openai:gpt-4o"
     if model_client is None:
         model_client, resolved_model_name = _create_model_client(model_spec)
     else:
@@ -121,43 +318,47 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     seed = config.get("seed")
     seed_value = int(seed) if seed is not None else None
     judge_mode = config.get("judge", "prog")
-    judge_model_spec = config.get("judge_model")  # Can be None
+    judge_model_spec = config.get("judge_model")
     mutation_policy = config.get("mutation_policy", "pivotal")
+
+    run_id = _infer_run_id(output_dir)
+    baseline_source = _validate_baseline_source(config.get("baseline_cot_source", "generate"))
+    reuse_cached = bool(config.get("reuse_cached_A_cots", True))
+    cache_dir = _resolve_cache_dir(config.get("cot_cache_dir"), run_id)
+
+    cfg = RunnerConfig(
+        input_path=input_path,
+        output_dir=output_dir,
+        conditions=conditions,
+        model_spec=model_spec,
+        resolved_model_name=resolved_model_name,
+        temperature=temperature,
+        seed_value=seed_value,
+        judge_mode=judge_mode,
+        judge_model_spec=judge_model_spec,
+        mutation_policy=mutation_policy,
+        baseline_cot_source=baseline_source,
+        reuse_cached_A_cots=reuse_cached,
+        cot_cache_dir=cache_dir,
+        run_id=run_id,
+    )
 
     all_results: List[Dict[str, Any]] = []
 
     for idx, sample in enumerate(samples):
         replay_client = ReplayToolClient(sample.frozen_context.tool_outputs)
         mutation_override = _determine_mutation(sample, mutation_policy, idx)
-        for condition in conditions:
-            replay_client.reset()
-            judge_client = None
-            judge_model = None
-            if judge_mode == "llm":
-                if judge_model_spec:
-                    # Use separate model for judge
-                    judge_client, judge_model = _create_model_client(judge_model_spec)
-                else:
-                    # Use same model as main inference
-                    judge_client = model_client
-                    judge_model = resolved_model_name
-            result = run_condition(
-                sample,
-                condition,
-                model_client,
-                replay_client,
-                prompts,
-                model_name=resolved_model_name,
-                temperature=temperature,
-                seed=seed_value,
-                mutation_override=mutation_override,
-                judge_client=judge_client,
-                judge_model=judge_model,
-            )
-            result["run_seed"] = seed_value
-            result["temperature"] = temperature
-            result["judge_mode"] = judge_mode
-            all_results.append(result)
+        sample_results = run_sample(
+            sample,
+            model_client,
+            prompts,
+            cfg,
+            replay_client,
+            mutation_override=mutation_override,
+        )
+        for record in sample_results:
+            _append_common_metadata(record, cfg)
+            all_results.append(record)
 
     samples_jsonl = output_dir / "samples.jsonl"
     with samples_jsonl.open("w", encoding="utf-8") as f:
@@ -235,16 +436,14 @@ def main(argv: Optional[List[str]] = None) -> None:
         "max_samples": args.max_samples or config.get("max_samples"),
     }
 
-    # merge config with overrides, preferring CLI values when provided
     merged = dict(config)
     merged.update({k: v for k, v in cli_overrides.items() if v is not None})
 
-    missing = [key for key in ["input", "output_dir"] if not merged.get(key)]
-    if missing:
-        raise SystemExit(f"Missing required configuration values: {', '.join(missing)}")
+    if "input" not in merged or "output_dir" not in merged:
+        raise ValueError("Both 'input' and 'output_dir' must be specified via config or CLI")
 
     run_experiment(merged)
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     main()

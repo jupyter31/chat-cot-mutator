@@ -1,6 +1,7 @@
 """Core pipeline helpers for headless batch runs."""
 from __future__ import annotations
 
+import logging
 import random
 import re
 import time
@@ -8,6 +9,8 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from core.schema import FrozenContextRecord, FrozenPassageRecord, SampleRecord
 from eval.judges import judge_grounding
@@ -229,6 +232,7 @@ def _execute_condition(
     final_answer = _extract_final_answer(content)
     final_answer_text = _strip_citations(final_answer)
 
+    logger.debug(f"      Judging grounding (mode: {'llm' if judge_model else 'heuristic'})...")
     passages = list(sample.frozen_context.passages)
     judge_result = judge_grounding(
         final_answer,
@@ -238,6 +242,7 @@ def _execute_condition(
         llm_model=judge_model,
         query=sample.query,
     )
+    logger.debug(f"      Grounding result: {judge_result['is_grounded']}")
     if sample.answer_gold:
         judge_result["answer_correct"] = _answers_match(final_answer, sample.answer_gold)
     else:

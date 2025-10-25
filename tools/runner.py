@@ -4,9 +4,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import re
 from dataclasses import dataclass
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,17 +15,10 @@ try:
 except ImportError:  # pragma: no cover - fallback for environments without PyYAML
     yaml = None
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
-logger = logging.getLogger(__name__)
-
 from clients.replay_tool_client import ReplayToolClient
 from core.pipeline import (
     PromptTemplates,
+    _extract_text_from_mutation,
     assemble_prompt,
     cache_key_for_A,
     extract_reasoning_block,
@@ -42,6 +35,13 @@ from eval.metrics import (
 )
 from mutations.registry import mutate
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 PROMPT_CONDITIONS = ["A", "B", "C", "D"]
 
@@ -369,7 +369,6 @@ def run_sample(
             results.append(record)
         elif condition in {"C", "D"}:
             if mutated_bundle is None:
-                # Fix: mutate() only takes directive and cot_text as positional args
                 meta_and_spec, mutated_text = mutate(
                     directive,
                     baseline_cot or "",
@@ -378,6 +377,9 @@ def run_sample(
                     temperature=cfg.temperature,
                     seed=cfg.seed_value,
                 )
+                # Extract plain text from the mutation result
+                mutated_text = _extract_text_from_mutation(mutated_text)
+                
                 # Unpack the tuple properly
                 meta, spec = meta_and_spec
                 mutated_bundle = (mutated_text, meta, spec)
@@ -481,10 +483,6 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     )
 
     all_results: List[Dict[str, Any]] = []
-    total_runs = len(samples) * len(conditions)
-    logger.info("")
-    logger.info(f"Starting {total_runs} condition runs ({len(samples)} samples × {len(conditions)} conditions)")
-    logger.info("="*60)
     total_runs = len(samples) * len(conditions)
     logger.info("")
     logger.info(f"Starting {total_runs} condition runs ({len(samples)} samples × {len(conditions)} conditions)")

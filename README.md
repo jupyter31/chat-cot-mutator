@@ -46,6 +46,24 @@ python tools/runner.py --config configs/exp_pilot.yaml
 
 This command processes the frozen samples in `data/samples/pilot.jsonl`, writes model generations to `results/exp_pilot/samples.jsonl`, and aggregates metrics in `metrics_overall.json`, `metrics_by_mutation.json`, and `tokens_latency.csv`.
 
+## Convert Hugging Face datasets into frozen samples
+
+The conversion script in `tools/build_hf_datasets.py` reproduces the WebGPT and HotpotQA processing used in our experiments.
+
+1. Install the optional dependencies:
+
+   ```powershell
+   pip install -r requirements.huggingface.txt
+   ```
+
+2. Run the converter, specifying which dataset to export (`webgpt`, `hotpot`, or `all`). The example below writes the default 1,000-sample subsets to `data/`:
+
+   ```powershell
+   python -m tools.build_hf_datasets all
+   ```
+
+   Use `--split`, `--limit`, `--seed`, or `--output-dir` to override the Hugging Face split, adjust the deterministic sample size, or change the destination directory. Invoke `python -m tools.build_hf_datasets --help` to see the full CLI reference.
+
 ### Interpreting outputs
 
 Open `results/exp_pilot/metrics_overall.json` to review the Attributed Accuracy (AAd), ACE, and other headline numbers for the run. Per-mutation breakdowns are stored in `metrics_by_mutation.json`, and token/latency accounting lives in `tokens_latency.csv`.

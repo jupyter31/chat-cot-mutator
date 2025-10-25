@@ -7,13 +7,19 @@ import random
 import re
 import time
 import unicodedata
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-from core.schema import FrozenContextRecord, FrozenPassageRecord, SampleRecord
+from core.schema import (
+    FrozenContextRecord,
+    FrozenPassageRecord,
+    FrozenToolRecord,
+    SampleRecord,
+)
 from eval.judges import judge_grounding
 
 
@@ -52,6 +58,10 @@ def _answers_match(pred: str, gold: str) -> bool:
 @dataclass
 class PromptTemplates:
     condition_to_template: Mapping[str, str]
+    system_prompt: str = "You are a careful assistant who cites evidence accurately."
+    evidence_channel: str = "tool"
+    tool_variant: str = "direct"
+    cot_injection_channel: str = "system"
 
     def __getitem__(self, condition: str) -> str:
         return self.condition_to_template[condition]
@@ -65,18 +75,170 @@ def _format_passage_label(passage: FrozenPassageRecord, idx: int) -> str:
     return f"passage_{idx+1}"
 
 
-def _format_evidence(context: FrozenContextRecord) -> str:
-    lines: List[str] = []
+def _format_tool_output(tool: FrozenToolRecord) -> str:
+    input_repr = tool.input if isinstance(tool.input, str) else json.dumps(tool.input)
+    output_repr = tool.output if isinstance(tool.output, str) else json.dumps(tool.output)
+    return f"- {tool.tool} | input={input_repr} | output={output_repr}"
+
+
+def _build_evidence_entries(context: FrozenContextRecord) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
     for idx, passage in enumerate(context.passages):
         label = _format_passage_label(passage, idx)
-        lines.append(f"[{label}] {passage.text}")
-    if context.tool_outputs:
-        lines.append("\nFROZEN TOOL OUTPUTS:")
-        for tool_idx, tool in enumerate(context.tool_outputs):
-            input_repr = tool.input if isinstance(tool.input, str) else str(tool.input)
-            output_repr = tool.output if isinstance(tool.output, str) else str(tool.output)
-            lines.append(f"- {tool.tool} | input={input_repr} | output={output_repr}")
+        entry: Dict[str, Any] = {
+            "type": "passage",
+            "index": idx,
+            "label": label,
+            "text": passage.text,
+            "display": f"[{label}] {passage.text}",
+        }
+        if passage.doc_id:
+            entry["doc_id"] = passage.doc_id
+        if passage.cite:
+            entry["cite"] = passage.cite
+        entries.append(entry)
+
+    for tool_idx, tool in enumerate(context.tool_outputs):
+        display = _format_tool_output(tool)
+        entry = {
+            "type": "tool_output",
+            "index": tool_idx,
+            "label": f"tool_{tool_idx + 1}",
+            "tool": tool.tool,
+            "input": tool.input,
+            "output": tool.output,
+            "text": display,
+            "display": display,
+        }
+        entries.append(entry)
+    return entries
+
+
+def _format_evidence(context: FrozenContextRecord) -> str:
+    entries = _build_evidence_entries(context)
+    lines: List[str] = []
+    tool_section_started = False
+    for entry in entries:
+        if entry["type"] == "passage":
+            lines.append(entry["display"])
+        else:
+            if not tool_section_started:
+                lines.append("\nFROZEN TOOL OUTPUTS:")
+                tool_section_started = True
+            lines.append(entry["display"])
     return "\n".join(lines).strip()
+
+
+def _find_last_user_content(messages: List[Mapping[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+            if isinstance(content, list):
+                collected: List[str] = []
+                for item in content:
+                    if isinstance(item, Mapping):
+                        text = item.get("text")
+                        if isinstance(text, str):
+                            collected.append(text)
+                    elif isinstance(item, str):
+                        collected.append(item)
+                if collected:
+                    return "".join(collected).strip()
+    return ""
+
+
+def assemble_messages(
+    condition: str,
+    sample: SampleRecord,
+    mutated_cot: Optional[str] = None,
+    prompts: Optional[PromptTemplates] = None,
+) -> List[Dict[str, Any]]:
+    """Assemble chat messages for the given condition."""
+
+    if prompts is None:
+        raise ValueError("Prompt templates must be provided")
+
+    template = prompts[condition]
+    evidence_entries = _build_evidence_entries(sample.frozen_context)
+    evidence_text = _format_evidence(sample.frozen_context)
+    mutated_cot_text = _as_text(mutated_cot) if mutated_cot is not None else ""
+
+    messages: List[Dict[str, Any]] = []
+    system_prompt = (prompts.system_prompt or "").strip()
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+
+    tool_variant = (prompts.tool_variant or "direct").lower()
+    evidence_channel = prompts.evidence_channel or "tool"
+
+    if tool_variant not in {"direct", "function_call"}:
+        raise ValueError(f"Unsupported tool_variant: {tool_variant}")
+
+    if tool_variant == "direct":
+        for entry in evidence_entries:
+            payload = json.dumps(entry, ensure_ascii=False)
+            messages.append(
+                {
+                    "role": evidence_channel,
+                    "name": "evidence_passage",
+                    "content": payload,
+                }
+            )
+    else:
+        for idx, entry in enumerate(evidence_entries):
+            call_id = f"tool_call_{idx}"
+            arguments = json.dumps(entry, ensure_ascii=False)
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": "evidence_passage",
+                                "arguments": arguments,
+                            },
+                        }
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": evidence_channel,
+                    "name": "evidence_passage",
+                    "tool_call_id": call_id,
+                    "content": arguments,
+                }
+            )
+
+    if condition in {"C", "D"} and mutated_cot_text:
+        messages.append(
+            {
+                "role": prompts.cot_injection_channel or "system",
+                "name": "cot_instructions",
+                "content": mutated_cot_text,
+            }
+        )
+
+    format_args: Dict[str, Any] = {
+        "query": sample.query,
+        "evidence": evidence_text,
+    }
+
+    if "{cot}" in template:
+        format_args["cot"] = mutated_cot_text
+    if "{mutated_cot_text}" in template:
+        format_args["mutated_cot_text"] = mutated_cot_text
+    if "{evidence_block}" in template:
+        format_args["evidence_block"] = evidence_text
+
+    prompt_text = template.format(**format_args).strip()
+    messages.append({"role": "user", "content": prompt_text})
+    return messages
 
 
 def _as_text(mutated_cot) -> str:
@@ -113,36 +275,6 @@ def _extract_text_from_mutation(mutation_result: Any) -> str:
     """Extract plain text from a mutation result that might be a dict/JSON structure."""
     # This function is now redundant with _as_text, but kept for backward compatibility
     return _as_text(mutation_result)
-
-
-def assemble_prompt(
-    condition: str,
-    sample: SampleRecord,
-    mutated_cot: Optional[str] = None,
-    prompts: Optional[PromptTemplates] = None,
-) -> str:
-    """Assemble the prompt for the given condition."""
-    if prompts is None:
-        raise ValueError("Prompt templates must be provided")
-    template = prompts[condition]
-    evidence = _format_evidence(sample.frozen_context)
-    mutated_cot_text = _as_text(mutated_cot) if mutated_cot is not None else ""
-    
-    format_args: Dict[str, Any] = {
-        "query": sample.query,
-        "evidence": evidence,
-    }
-    
-    # Handle different template variable names
-    if "{cot}" in template:
-        format_args["cot"] = mutated_cot_text
-    if "{mutated_cot_text}" in template:
-        format_args["mutated_cot_text"] = mutated_cot_text
-    if "{evidence_block}" in template:
-        format_args["evidence_block"] = evidence
-        
-    prompt_text = template.format(**format_args)
-    return prompt_text.strip()
 
 
 def _extract_citations(text: str) -> List[str]:
@@ -237,15 +369,13 @@ def try_use_sample_A(cfg: Any, sample: Any) -> Tuple[Optional[str], bool]:
     return None, False
 
 
-def _build_request(prompt: str, temperature: float, seed: Optional[int]) -> MutableMapping[str, Any]:
+def _build_request(
+    messages: List[Mapping[str, Any]],
+    temperature: float,
+    seed: Optional[int],
+) -> MutableMapping[str, Any]:
     request: MutableMapping[str, Any] = {
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a careful assistant who cites evidence accurately.",
-            },
-            {"role": "user", "content": prompt},
-        ],
+        "messages": deepcopy(messages),
         "temperature": temperature,
     }
     if seed is not None:
@@ -266,8 +396,13 @@ def _execute_condition(
     judge_client=None,
     judge_model: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    prompt = assemble_prompt(condition, sample, mutated_cot=baseline_cot, prompts=prompts)
-    request = _build_request(prompt, temperature, seed)
+    messages = assemble_messages(
+        condition,
+        sample,
+        mutated_cot=baseline_cot,
+        prompts=prompts,
+    )
+    request = _build_request(messages, temperature, seed)
     start_time = time.time()
     response = model_client.send_chat_request(model_name, request)
     latency = time.time() - start_time
@@ -295,10 +430,13 @@ def _execute_condition(
 
     usage = response.get("usage", {}) if isinstance(response, Mapping) else {}
 
+    final_prompt = _find_last_user_content(messages)
+
     base_record = {
         "sample_id": sample.id,
         "condition": condition,
-        "prompt": prompt,
+        "prompt": final_prompt,
+        "messages": deepcopy(messages),
         "response": content,
         "final_answer": final_answer,
         "final_answer_text": final_answer_text,
@@ -422,7 +560,7 @@ def run_condition(
 __all__ = [
     "PromptTemplates",
     "_as_text",
-    "assemble_prompt",
+    "assemble_messages",
     "extract_reasoning_block",
     "generate_trace_A",
     "run_condition",

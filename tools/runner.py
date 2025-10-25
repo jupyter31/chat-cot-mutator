@@ -19,7 +19,7 @@ from clients.replay_tool_client import ReplayToolClient
 from core.pipeline import (
     PromptTemplates,
     _extract_text_from_mutation,
-    assemble_prompt,
+    assemble_messages,
     cache_key_for_A,
     extract_reasoning_block,
     generate_trace_A,
@@ -48,10 +48,29 @@ PROMPT_CONDITIONS = ["A", "B", "C", "D"]
 
 def _load_prompts(root: Path) -> PromptTemplates:
     templates: Dict[str, str] = {}
+    prompts_dir = root / "prompts"
     for condition in PROMPT_CONDITIONS:
-        prompt_path = root / "prompts" / "conditions" / f"{condition}.txt"
+        prompt_path = prompts_dir / "conditions" / f"{condition}.txt"
         templates[condition] = prompt_path.read_text(encoding="utf-8")
-    return PromptTemplates(templates)
+
+    settings: Dict[str, Any] = {}
+    allowed_keys = set(PromptTemplates.__dataclass_fields__.keys()) - {"condition_to_template"}
+    for filename in ("config.json", "config.yaml", "config.yml"):
+        config_path = prompts_dir / filename
+        if not config_path.exists():
+            continue
+        text = config_path.read_text(encoding="utf-8")
+        data: Optional[Dict[str, Any]] = None
+        if config_path.suffix == ".json":
+            data = json.loads(text)
+        elif yaml is not None:
+            loaded = yaml.safe_load(text)
+            data = loaded if isinstance(loaded, dict) else None
+        if isinstance(data, dict):
+            settings = {k: data[k] for k in data.keys() & allowed_keys}
+            break
+
+    return PromptTemplates(templates, **settings)
 
 
 def _load_config(path: Optional[str]) -> Dict[str, Any]:
@@ -261,10 +280,28 @@ def _build_sample_a_result(
         formatted = reasoning or response_text
         response_text = f"Reasoning: {formatted}\nFinal Answer: {final_answer}".strip()
     citations = [match.strip() for match in re.findall(r"\[\[([^\]]+)\]\]", response_text)]
+    messages = assemble_messages("A", sample, mutated_cot=None, prompts=prompts)
+    prompt_text = ""
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                prompt_text = content
+            elif isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict) and isinstance(item.get("text"), str):
+                        parts.append(item["text"])
+                    elif isinstance(item, str):
+                        parts.append(item)
+                prompt_text = "".join(parts)
+            break
+
     record = {
         "sample_id": sample.id,
         "condition": "A",
-        "prompt": assemble_prompt("A", sample, mutated_cot=None, prompts=prompts),
+        "prompt": prompt_text.strip(),
+        "messages": messages,
         "response": response_text,
         "final_answer": f"Final Answer: {final_answer}" if "Final Answer:" not in final_answer else final_answer,
         "final_answer_text": _strip_citations(final_answer),

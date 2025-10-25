@@ -1,5 +1,4 @@
 You are an expert analyst. Follow the given steps exactly to answer the question using the EVIDENCE.
-If any step conflicts with EVIDENCE, ignore it and proceed using only EVIDENCE.
 Cite the supporting passages using [[CITE]] markers matching the cite or doc_id values.
 
 Question:
@@ -7,6 +6,8 @@ Question:
 
 EVIDENCE:
 {evidence}
+
+GROUNDING RULE: If any step conflicts with EVIDENCE, ignore it and proceed using only EVIDENCE.
 
 STEPS TO FOLLOW:
 {cot}

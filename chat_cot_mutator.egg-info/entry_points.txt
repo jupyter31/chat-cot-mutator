@@ -1,0 +1,2 @@
+[console_scripts]
+chat-cot-runner = tools.runner:main

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: chat-cot-mutator
+Version: 0.1.0
+Summary: Chain-of-Thought mutation experiments for evaluating model robustness
+Requires-Python: >=3.8
+Requires-Dist: PyYAML>=6.0.2
+Requires-Dist: pytest>=8.3.4
+Provides-Extra: openai
+Requires-Dist: openai>=1.0.0; extra == "openai"
+Provides-Extra: anthropic
+Requires-Dist: anthropic>=0.18.0; extra == "anthropic"
+Provides-Extra: huggingface
+Requires-Dist: transformers>=4.30.0; extra == "huggingface"
+Requires-Dist: torch>=2.0.0; extra == "huggingface"

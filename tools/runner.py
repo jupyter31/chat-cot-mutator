@@ -76,6 +76,7 @@ def _create_model_client(model_spec: str):
     model_name = model_spec
     if ":" in model_spec:
         provider, model_name = model_spec.split(":", 1)
+    
     client = None
     try:
         import client_config
@@ -89,7 +90,7 @@ def _create_model_client(model_spec: str):
     if client is None:
         from clients.client_factory import create_llm_client
 
-        client = create_llm_client(provider)
+        client = create_llm_client(provider, endpoint=None)
     return client, model_name
 
 
@@ -110,7 +111,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     output_dir = Path(config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_spec = config.get("model", "openai:gpt-4o")
+    model_spec = config.get("model") or "openai:gpt-4o"  # Default to openai if not specified
     if model_client is None:
         model_client, resolved_model_name = _create_model_client(model_spec)
     else:
@@ -120,6 +121,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     seed = config.get("seed")
     seed_value = int(seed) if seed is not None else None
     judge_mode = config.get("judge", "prog")
+    judge_model_spec = config.get("judge_model")  # Can be None
     mutation_policy = config.get("mutation_policy", "pivotal")
 
     all_results: List[Dict[str, Any]] = []
@@ -132,8 +134,13 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
             judge_client = None
             judge_model = None
             if judge_mode == "llm":
-                judge_client = model_client
-                judge_model = resolved_model_name
+                if judge_model_spec:
+                    # Use separate model for judge
+                    judge_client, judge_model = _create_model_client(judge_model_spec)
+                else:
+                    # Use same model as main inference
+                    judge_client = model_client
+                    judge_model = resolved_model_name
             result = run_condition(
                 sample,
                 condition,
@@ -198,12 +205,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--config", help="Path to YAML config file", default=None)
     parser.add_argument("--input", help="Path to input samples JSONL")
     parser.add_argument("--output_dir", help="Directory to write outputs")
-    parser.add_argument("--model", help="Model spec provider:model_name", default="openai:gpt-4o")
-    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--model", help="Model spec provider:model_name", default=None)
+    parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--conditions", help="Comma separated conditions", default=None)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--judge", choices=["prog", "llm"], default="prog")
+    parser.add_argument("--judge_model", help="Model spec for judge (provider:model_name). If not specified, uses same as --model", default=None)
     parser.add_argument("--mutation_policy", choices=["pivotal", "control", "none"], default="pivotal")
     parser.add_argument("--max_samples", type=int, default=0)
     return parser.parse_args(argv)
@@ -222,6 +230,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "conditions": args.conditions or config.get("conditions"),
         "batch_size": args.batch_size,
         "judge": args.judge or config.get("judge"),
+        "judge_model": args.judge_model or config.get("judge_model"),
         "mutation_policy": args.mutation_policy or config.get("mutation_policy"),
         "max_samples": args.max_samples or config.get("max_samples"),
     }

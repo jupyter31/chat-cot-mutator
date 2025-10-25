@@ -1,11 +1,12 @@
 """LLM-backed registry for chain-of-thought mutations."""
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,14 @@ class ParsedDirective:
 
     kind: str
     params: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class MutationMeta:
+    applied: bool
+    mutation_family: Optional[str]
+    mutation_intent: Optional[str]
+    mutation_diff: Optional[str]
 
 
 _DIRECTIVE_PATTERN = re.compile(r"(?P<name>[A-Za-z_:-]+)\s*(?:\((?P<args>.*)\))?$")
@@ -137,23 +146,54 @@ def _load_messages(parsed: ParsedDirective) -> Sequence[Mapping[str, str]]:
     return messages
 
 
+def _compute_diff(original: str, mutated: str) -> str:
+    diff_lines = difflib.unified_diff(
+        original.splitlines(),
+        mutated.splitlines(),
+        fromfile="original",
+        tofile="mutated",
+        lineterm="",
+    )
+    return "\n".join(diff_lines)
+
+
 def mutate(
     cot: str,
     mutation_directive: str | None,
+    frozen_context: Mapping[str, Any] | None = None,
+    query: str | None = None,
+    final_answer: str | None = None,
     *,
-    model_client,
-    model_name: str,
+    model_client=None,
+    model_name: str | None = None,
     temperature: float = 0.0,
     seed: int | None = None,
-) -> str:
+) -> Tuple[str, Mapping[str, Any], Mapping[str, Any]]:
     """Use an LLM to apply the requested mutation to a chain-of-thought."""
 
-    if not mutation_directive or not cot.strip():
-        return cot
-
     parsed = _parse_directive(mutation_directive)
-    if parsed is None:
-        raise ValueError(f"Unknown mutation directive: {mutation_directive}")
+    spec = {
+        "directive": mutation_directive,
+        "parsed_kind": parsed.kind if parsed else None,
+    }
+
+    if not mutation_directive or not cot.strip() or parsed is None:
+        meta = {
+            "applied": False,
+            "mutation_family": parsed.kind if parsed else None,
+            "mutation_intent": mutation_directive,
+            "mutation_diff": None,
+        }
+        return cot, meta, spec
+
+    if model_client is None or model_name is None:
+        meta = {
+            "applied": False,
+            "mutation_family": parsed.kind,
+            "mutation_intent": mutation_directive,
+            "mutation_diff": None,
+        }
+        return cot, meta, spec
 
     messages = _load_messages(parsed)
 
@@ -163,7 +203,6 @@ def mutate(
         content = content.replace("{{tool_results}}", _format_tool_results(cot))
         content = _inject_directive_hints(content, parsed)
         if "{{" in content:
-            # Replace any unfilled templating braces with nothing to avoid leaking placeholders.
             content = re.sub(r"\{\{[^}]+\}\}", "", content)
         if "Chain-of-thought:" not in content:
             content = f"{content}\n\nChain-of-thought:\n{cot.strip()}".strip()
@@ -179,7 +218,17 @@ def mutate(
     response = model_client.send_chat_request(model_name, request)
     message = response.get("choices", [{}])[0].get("message", {})
     mutated = (message.get("content") or "").strip()
-    return mutated or cot
+    mutated = mutated or cot
+
+    applied = mutated.strip() != cot.strip()
+    diff = _compute_diff(cot, mutated) if applied else None
+    meta = {
+        "applied": applied,
+        "mutation_family": parsed.kind,
+        "mutation_intent": mutation_directive,
+        "mutation_diff": diff,
+    }
+    return mutated, meta, spec
 
 
-__all__ = ["mutate"]
+__all__ = ["mutate", "MutationMeta", "ParsedDirective"]

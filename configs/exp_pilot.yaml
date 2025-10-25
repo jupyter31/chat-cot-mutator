@@ -4,8 +4,7 @@ model: microsoft_internal:dev-gpt-4o-gg
 temperature: 0.2
 seed: 7
 conditions: ["A", "B", "C", "D"]
-judge: "prog"  # "prog" for programmatic, "llm" for LLM-based two-stage judge
-# judge_model: "microsoft_internal:dev-gpt-4o-gg"  # Optional: specify different model for judge
-batch_size: 4
+judge: "llm"  # "prog" for programmatic, "llm" for LLM-based two-stage judge
+judge_model: "microsoft_internal:dev-gpt-4o-gg"
 mutation_policy: "pivotal"
 max_samples: 0

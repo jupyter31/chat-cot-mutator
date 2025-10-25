@@ -1,12 +1,15 @@
 """Core pipeline helpers for headless batch runs."""
 from __future__ import annotations
 
+import logging
 import random
 import re
 import time
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional
+
+logger = logging.getLogger(__name__)
 
 from core.schema import FrozenContextRecord, FrozenPassageRecord, SampleRecord
 from eval.judges import judge_grounding
@@ -130,6 +133,7 @@ def run_condition(
     mutated_cot = None
     mutation_type = None
     if condition in {"C", "D"}:
+        logger.debug(f"      Mutating CoT with directive: {directive[:50]}...")
         mutated_cot = mutate(
             baseline_cot,
             directive,
@@ -144,11 +148,13 @@ def run_condition(
             mutation_type = "control"
         else:
             mutation_type = "pivotal"
+        logger.debug(f"      Mutation complete (type: {mutation_type})")
     elif condition == "A":
         mutation_type = "baseline"
     else:
         mutation_type = "answer_only"
 
+    logger.debug(f"      Assembling prompt for condition {condition}")
     prompt = assemble_prompt(condition, sample, mutated_cot=mutated_cot, prompts=prompts)
 
     request: MutableMapping[str, Any] = {
@@ -161,15 +167,19 @@ def run_condition(
     if seed is not None:
         request["seed"] = seed
 
+    logger.debug(f"      Sending request to {model_name}...")
     start_time = time.time()
     response = model_client.send_chat_request(model_name, request)
     latency = time.time() - start_time
+    logger.debug(f"      Received response in {latency:.2f}s")
+    
     message = response.get("choices", [{}])[0].get("message", {})
     content = message.get("content", "").strip()
     citations = _extract_citations(content)
     final_answer = _extract_final_answer(content)
     final_answer_text = _strip_citations(final_answer)
 
+    logger.debug(f"      Judging grounding (mode: {'llm' if judge_model else 'heuristic'})...")
     passages = list(sample.frozen_context.passages)
     judge_result = judge_grounding(
         final_answer,
@@ -179,6 +189,7 @@ def run_condition(
         llm_model=judge_model,
         query=sample.query,
     )
+    logger.debug(f"      Grounding result: {judge_result['is_grounded']}")
     if sample.answer_gold:
         judge_result["answer_correct"] = _answers_match(final_answer, sample.answer_gold)
     else:

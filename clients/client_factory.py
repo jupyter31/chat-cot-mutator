@@ -73,9 +73,12 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Hugging Face client requires 'torch' and 'transformers' packages. Install with: pip install torch transformers"
             )
     
-    elif provider == "microsoft":
+    elif provider == "microsoft" or provider == "microsoft_internal":
         try:
-            from .llm_api import MicrosoftLLMClient
+            from .microsoft_client import MicrosoftLLMClient
+            # Provide default endpoint if not specified
+            if "endpoint" not in kwargs:
+                kwargs["endpoint"] = None
             return MicrosoftLLMClient(**kwargs)
         except ImportError:
             raise ImportError(

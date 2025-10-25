@@ -1,0 +1,12 @@
+PyYAML>=6.0.2
+pytest>=8.3.4
+
+[anthropic]
+anthropic>=0.18.0
+
+[huggingface]
+transformers>=4.30.0
+torch>=2.0.0
+
+[openai]
+openai>=1.0.0

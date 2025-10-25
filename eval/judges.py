@@ -9,6 +9,16 @@ from typing import Any, Dict, Iterable, List, Optional
 from core.schema import FrozenPassageRecord
 
 
+def _normalize_text(s: str) -> str:
+    s = re.sub(r"\s*\[\[[^\]]+\]\]\s*", " ", s or "")
+    s = re.sub(r"[^a-z0-9\s]", " ", s.lower())
+    return re.sub(r"\s+", " ", s).strip()
+
+def _content_words(s: str) -> set[str]:
+    toks = [t for t in _normalize_text(s).split() if len(t) > 2]
+    return set(toks)
+
+
 def _load_prompt_messages(prompt_name: str) -> List[Dict[str, str]]:
     """Load prompt messages from JSONL file."""
     prompt_dir = Path(__file__).resolve().parent.parent / "prompts" / "judge"
@@ -151,15 +161,36 @@ def judge_grounding(
     Falls back to simple heuristic if LLM client not provided.
     """
     
-    # If no LLM client, use simple citation-based heuristic
+    # If no LLM client, use improved heuristic with citation validation and overlap
     if llm_client is None or llm_model is None:
-        # Simple fallback: check if citations exist
-        has_citations = bool(citations)
+        labels = []
+        label_to_text = {}
+        for idx, p in enumerate(passages):
+            label = p.cite or p.doc_id or f"passage_{idx+1}"
+            labels.append(label)
+            label_to_text[label] = p.text
+        valid = [c for c in citations if c in labels]
+        if not valid:
+            return {
+                "is_grounded": False,
+                "method": "heuristic_fallback",
+                "citations_provided": citations,
+                "num_passages": len(passages),
+            }
+        ans_words = _content_words(answer)
+        max_overlap = 0.0
+        for c in valid:
+            pw = _content_words(label_to_text[c])
+            denom = max(1, len(ans_words))
+            overlap = len(ans_words & pw) / denom
+            if overlap > max_overlap:
+                max_overlap = overlap
         return {
-            "is_grounded": has_citations,
+            "is_grounded": max_overlap >= 0.2,  # tunable
             "method": "heuristic_fallback",
             "citations_provided": citations,
             "num_passages": len(passages),
+            "overlap_max": max_overlap,
         }
     
     # Stage 1: Extract claims from answer

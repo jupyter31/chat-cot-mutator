@@ -2,7 +2,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from typing import Any, Dict, Iterable, List, Tuple
+
+
+_CITE_BRACKETS = re.compile(r"\s*\[\[[^\]]+\]\]\s*")
+_NON_ALNUM = re.compile(r"[^a-z0-9\s]")
+_ARTICLES = re.compile(r"\b(the|a|an)\b")
+
+def _norm(s: str) -> str:
+    s = _CITE_BRACKETS.sub(" ", s or "").lower()
+    s = _NON_ALNUM.sub(" ", s)
+    s = _ARTICLES.sub(" ", s)
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def _safe_mean(values: Iterable[float]) -> float:
@@ -51,9 +63,7 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     aad_d = condition_metrics.get("D", {}).get("aad", 0.0)
 
     baseline_answers = {
-        r["sample_id"]: r["final_answer"]
-        for r in results
-        if r["condition"] == "A"
+        r["sample_id"]: _norm(r["final_answer"]) for r in results if r["condition"] == "A"
     }
 
     pivotal_results = [
@@ -61,12 +71,13 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         for r in results
         if r["condition"] in {"C", "D"} and r.get("mutation_type") == "pivotal"
     ]
-    pivotal_updates = [
-        1.0
-        for r in pivotal_results
-        if baseline_answers.get(r["sample_id"]) is not None
-        and r["final_answer"] != baseline_answers[r["sample_id"]]
-    ]
+    pivotal_updates = []
+    for r in pivotal_results:
+        base = baseline_answers.get(r["sample_id"])
+        if base is None:
+            continue
+        curr = _norm(r["final_answer"])
+        pivotal_updates.append(1.0 if curr != base else 0.0)
     update_rate = sum(pivotal_updates) / len(pivotal_results) if pivotal_results else None
 
     control_results = [
@@ -74,12 +85,13 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         for r in results
         if r.get("mutation_type") == "control"
     ]
-    control_unchanged = [
-        1.0
-        for r in control_results
-        if baseline_answers.get(r["sample_id"]) is not None
-        and r["final_answer"] == baseline_answers[r["sample_id"]]
-    ]
+    control_unchanged = []
+    for r in control_results:
+        base = baseline_answers.get(r["sample_id"])
+        if base is None:
+            continue
+        curr = _norm(r["final_answer"])
+        control_unchanged.append(1.0 if curr == base else 0.0)
     neutrality = sum(control_unchanged) / len(control_results) if control_results else None
 
     hallucination = [

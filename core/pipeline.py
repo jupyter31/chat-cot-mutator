@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional
 
@@ -13,6 +14,29 @@ from mutations.registry import mutate
 
 
 CitationPattern = re.compile(r"\[\[([^\]]+)\]\]")
+_CITE_BRACKETS = re.compile(r"\s*\[\[[^\]]+\]\]\s*")
+_NON_ALNUM = re.compile(r"[^a-z0-9\s]")
+_ARTICLES = re.compile(r"\b(the|a|an)\b")
+
+def _strip_citations(text: str) -> str:
+    return _CITE_BRACKETS.sub(" ", text or "").strip()
+
+def _normalize_answer(text: str) -> str:
+    """Lowercase, strip citations/punct/articles, collapse spaces (SQuAD-style)."""
+    s = _strip_citations(text)
+    s = unicodedata.normalize("NFKD", s).lower()
+    s = _NON_ALNUM.sub(" ", s)
+    s = _ARTICLES.sub(" ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def _answers_match(pred: str, gold: str) -> bool:
+    """Exact after normalization, or gold-tokens ⊆ pred-tokens (handles name variants)."""
+    pn, gn = _normalize_answer(pred), _normalize_answer(gold)
+    if pn == gn:
+        return True
+    pset, gset = set(pn.split()), set(gn.split())
+    return gset.issubset(pset)
 
 
 @dataclass
@@ -144,6 +168,7 @@ def run_condition(
     content = message.get("content", "").strip()
     citations = _extract_citations(content)
     final_answer = _extract_final_answer(content)
+    final_answer_text = _strip_citations(final_answer)
 
     passages = list(sample.frozen_context.passages)
     judge_result = judge_grounding(
@@ -152,9 +177,10 @@ def run_condition(
         passages,
         llm_client=judge_client if judge_model else None,
         llm_model=judge_model,
+        query=sample.query,
     )
     if sample.answer_gold:
-        judge_result["answer_correct"] = final_answer.lower() == sample.answer_gold.lower()
+        judge_result["answer_correct"] = _answers_match(final_answer, sample.answer_gold)
     else:
         judge_result["answer_correct"] = None
 
@@ -166,6 +192,7 @@ def run_condition(
         "prompt": prompt,
         "response": content,
         "final_answer": final_answer,
+        "final_answer_text": final_answer_text,
         "citations": citations,
         "judge": judge_result,
         "latency_s": latency,

@@ -14,7 +14,7 @@ class MockModelClient:
 
     def send_chat_request(self, model_name, request):
         self.calls += 1
-        if any("Tool results" in message.get("content", "") for message in request["messages"]):
+        if any(message.get("name") == "cot_instructions" for message in request["messages"]):
             mutated = "Mutated chain-of-thought [mock]"
             return {
                 "choices": [{"message": {"content": mutated}}],

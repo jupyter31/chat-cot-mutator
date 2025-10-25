@@ -15,8 +15,24 @@ class FakeModelClient:
 
     def send_chat_request(self, model_name: str, request: dict) -> dict:
         self.requests.append((model_name, request))
-        prompt = request["messages"][1]["content"]
-        if "STEPS TO FOLLOW:" in prompt:
+        messages = request["messages"]
+        prompt = ""
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                prompt = message.get("content", "")
+                if isinstance(prompt, list):
+                    parts = []
+                    for item in prompt:
+                        if isinstance(item, dict) and isinstance(item.get("text"), str):
+                            parts.append(item["text"])
+                        elif isinstance(item, str):
+                            parts.append(item)
+                    prompt = "".join(parts)
+                break
+
+        has_internal_steps = any(m.get("name") == "cot_instructions" for m in messages)
+
+        if has_internal_steps:
             content = "Reasoning: following steps [[C1]]\nFinal Answer: mutated [[C2]]"
         elif "Final Answer:" in prompt and "Reasoning:" not in prompt:
             content = "Final Answer: answer [[C1]]"
@@ -70,9 +86,22 @@ def test_generated_trace_reused_in_mutations(tmp_path: Path, sample_jsonl: Path)
     assert a_record["trace_A"], "Expected non-empty trace for generated baseline"
     baseline_trace = a_record["trace_A"]
     assert all(r["baseline_cot_used"] == "generated" for r in records)
+
+    # Ensure evidence passages are emitted as tool messages
+    a_request_messages = fake.requests[0][1]["messages"]
+    tool_messages = [m for m in a_request_messages if m.get("name") == "evidence_passage"]
+    assert tool_messages, "Expected tool messages carrying evidence passages"
+    for tool_msg in tool_messages:
+        payload = json.loads(tool_msg["content"])
+        assert payload["type"] in {"passage", "tool_output"}
+        assert payload["text"].strip()
+
     for condition in ("C", "D"):
         record = next(r for r in records if r["condition"] == condition)
         assert record["mutated_cot"].strip() == baseline_trace.strip()
+        cot_messages = [m for m in record["messages"] if m.get("name") == "cot_instructions"]
+        assert cot_messages, "Expected mutated CoT to be injected as a dedicated message"
+        assert cot_messages[0]["content"].strip() == baseline_trace.strip()
     # A + B + C + D (mutation no-op)
     assert len(fake.requests) == 4
 
@@ -102,6 +131,9 @@ def test_sample_provided_trace_used_when_requested(tmp_path: Path, sample_jsonl:
     for condition in ("C", "D"):
         record = next(r for r in records if r["condition"] == condition)
         assert record["mutated_cot"].strip() == baseline.strip()
+        cot_messages = [m for m in record["messages"] if m.get("name") == "cot_instructions"]
+        assert cot_messages
+        assert cot_messages[0]["content"].strip() == baseline.strip()
     # B + C + D (mutation no-op, A skipped)
     assert len(fake.requests) == 3
 

@@ -1,15 +1,8 @@
-You are an expert analyst. Use only the EVIDENCE and the INTERNAL STEPS to answer the question.
-Follow the INTERNAL STEPS exactly. Do NOT restate or reveal the steps. Return only the final answer with citations.
+You are an expert analyst. Use only the evidence_passage tool messages and the internal steps provided to you to answer the question.
+Follow the internal steps exactly. Do NOT restate or reveal the steps. Return only the final answer with citations.
 
 Question:
 {query}
-
-EVIDENCE:
-{evidence_block}
-
-### INTERNAL STEPS (follow exactly; do NOT restate)
-{mutated_cot_text}
-### END INTERNAL STEPS
 
 Respond in the following format:
 Final Answer: <short answer with citations>

@@ -1,0 +1,6 @@
+{
+  "system_prompt": "You are a careful assistant who cites evidence accurately.",
+  "evidence_channel": "tool",
+  "tool_variant": "direct",
+  "cot_injection_channel": "system"
+}

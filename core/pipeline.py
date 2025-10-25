@@ -78,6 +78,47 @@ def _format_evidence(context: FrozenContextRecord) -> str:
     return "\n".join(lines).strip()
 
 
+def _extract_text_from_mutation(mutation_result: Any) -> str:
+    """Extract plain text from a mutation result that might be a dict/JSON structure."""
+    if mutation_result is None:
+        return ""
+    
+    # If it's already a string, return it
+    if isinstance(mutation_result, str):
+        return mutation_result
+    
+    # If it's a dict, try to extract the content
+    if isinstance(mutation_result, dict):
+        # Check for nested cot structure
+        if "cot" in mutation_result and isinstance(mutation_result["cot"], dict):
+            return mutation_result["cot"].get("content", "")
+        # Check for direct content field
+        if "content" in mutation_result:
+            content = mutation_result["content"]
+            if isinstance(content, str):
+                return content
+            elif isinstance(content, dict) and "content" in content:
+                return content["content"]
+        # Check for text field
+        if "text" in mutation_result:
+            return mutation_result["text"]
+    
+    # If it's a list, concatenate text parts
+    if isinstance(mutation_result, list):
+        parts = []
+        for item in mutation_result:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                if "text" in item:
+                    parts.append(item["text"])
+                elif "content" in item:
+                    parts.append(item["content"])
+        return "".join(parts)
+    
+    # Fallback to string representation
+    return str(mutation_result)
+
 def assemble_prompt(
     condition: str,
     sample: SampleRecord,
@@ -94,7 +135,8 @@ def assemble_prompt(
         "evidence": evidence,
     }
     if "{cot}" in template:
-        steps = mutated_cot or ""
+        # Ensure mutated_cot is plain text
+        steps = _extract_text_from_mutation(mutated_cot) if mutated_cot else ""
         format_args["cot"] = steps
     prompt_text = template.format(**format_args)
     return prompt_text.strip()

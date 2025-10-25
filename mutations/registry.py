@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping, Dict, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -158,54 +158,51 @@ def _compute_diff(original: str, mutated: str) -> str:
 
 
 def mutate(
-    cot: str,
-    mutation_directive: str | None,
-    frozen_context: Mapping[str, Any] | None = None,
-    query: str | None = None,
-    final_answer: str | None = None,
+    directive: str,
+    cot_text: str,
     *,
     model_client=None,
-    model_name: str | None = None,
-    temperature: float = 0.0,
-    seed: int | None = None,
-) -> Tuple[str, Mapping[str, Any], Mapping[str, Any]]:
-    """Use an LLM to apply the requested mutation to a chain-of-thought."""
+    model_name: Optional[str] = None,
+    temperature: float = 0.5,
+    seed: Optional[int] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Apply a mutation directive to a chain-of-thought text."""
 
-    parsed = _parse_directive(mutation_directive)
+    parsed = _parse_directive(directive)
     spec = {
-        "directive": mutation_directive,
+        "directive": directive,
         "parsed_kind": parsed.kind if parsed else None,
     }
 
-    if not mutation_directive or not cot.strip() or parsed is None:
+    if not directive or not cot_text.strip() or parsed is None:
         meta = {
             "applied": False,
             "mutation_family": parsed.kind if parsed else None,
-            "mutation_intent": mutation_directive,
+            "mutation_intent": directive,
             "mutation_diff": None,
         }
-        return cot, meta, spec
+        return cot_text, meta, spec
 
     if model_client is None or model_name is None:
         meta = {
             "applied": False,
             "mutation_family": parsed.kind,
-            "mutation_intent": mutation_directive,
+            "mutation_intent": directive,
             "mutation_diff": None,
         }
-        return cot, meta, spec
+        return cot_text, meta, spec
 
     messages = _load_messages(parsed)
 
     transformed_messages = []
     for message in messages:
         content = message.get("content", "")
-        content = content.replace("{{tool_results}}", _format_tool_results(cot))
+        content = content.replace("{{tool_results}}", _format_tool_results(cot_text))
         content = _inject_directive_hints(content, parsed)
         if "{{" in content:
             content = re.sub(r"\{\{[^}]+\}\}", "", content)
         if "Chain-of-thought:" not in content:
-            content = f"{content}\n\nChain-of-thought:\n{cot.strip()}".strip()
+            content = f"{content}\n\nChain-of-thought:\n{cot_text.strip()}".strip()
         transformed_messages.append({"role": message.get("role", "user"), "content": content})
 
     request = {
@@ -217,18 +214,44 @@ def mutate(
 
     response = model_client.send_chat_request(model_name, request)
     message = response.get("choices", [{}])[0].get("message", {})
-    mutated = (message.get("content") or "").strip()
-    mutated = mutated or cot
-
-    applied = mutated.strip() != cot.strip()
-    diff = _compute_diff(cot, mutated) if applied else None
+    
+    # Extract the actual text content from the response
+    content = message.get("content", "")
+    
+    # If content is a dict/JSON structure, extract the text
+    if isinstance(content, dict):
+        if "content" in content:
+            content = content["content"]
+        elif "cot" in content and isinstance(content["cot"], dict):
+            content = content["cot"].get("content", "")
+    elif isinstance(content, list):
+        # Handle list of content parts
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                text_parts.append(item["text"])
+            elif isinstance(item, str):
+                text_parts.append(item)
+        content = "".join(text_parts)
+    
+    # Ensure we return a string, not a dict
+    if not isinstance(content, str):
+        content = str(content)
+    
     meta = {
-        "applied": applied,
-        "mutation_family": parsed.kind,
-        "mutation_intent": mutation_directive,
-        "mutation_diff": diff,
+        "applied": bool(content and content != cot_text),
+        "mutation_family": "llm_directed",
+        "mutation_intent": directive,
     }
-    return mutated, meta, spec
+    
+    spec = {
+        "directive": directive,
+        "temperature": temperature,
+        "seed": seed,
+        "model": model_name,
+    }
+    
+    return (meta, spec), content  # Return the string content, not a dict
 
 
 __all__ = ["mutate", "MutationMeta", "ParsedDirective"]

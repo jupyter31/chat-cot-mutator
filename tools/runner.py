@@ -369,18 +369,18 @@ def run_sample(
             results.append(record)
         elif condition in {"C", "D"}:
             if mutated_bundle is None:
-                context_payload = sample.frozen_context.to_dict()
-                mutated_bundle = mutate(
-                    baseline_cot or "",
+                # Fix: mutate() only takes directive and cot_text as positional args
+                meta_and_spec, mutated_text = mutate(
                     directive,
-                    context_payload,
-                    sample.query,
-                    a_result["final_answer_A"],
+                    baseline_cot or "",
                     model_client=model_client,
                     model_name=model_name,
                     temperature=cfg.temperature,
                     seed=cfg.seed_value,
                 )
+                # Unpack the tuple properly
+                meta, spec = meta_and_spec
+                mutated_bundle = (mutated_text, meta, spec)
             mutated_cot, meta, spec = mutated_bundle
             record = run_condition(
                 sample,

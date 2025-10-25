@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Dict, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -37,19 +40,28 @@ def _normalize_kind(raw: str) -> str:
 def _parse_entity_swap_args(raw_args: str | None) -> Mapping[str, str]:
     if not raw_args:
         return {"old": "", "new": ""}
-    arrow_match = re.search(r"([^->=]+?)->([^=]+)$", raw_args)
+    
+    # Remove common prefixes like "name=", "old=", etc.
+    cleaned = re.sub(r'^(name|old|entity)=', '', raw_args.strip())
+    
+    # Try arrow format: "Rembrandt->Vermeer" or "old=Rembrandt->new=Vermeer"
+    arrow_match = re.search(r'([^->=]+?)->(.+)$', cleaned)
     if arrow_match:
-        left = arrow_match.group(1)
-        right = arrow_match.group(2)
-    else:
-        parts = [p.strip() for p in raw_args.split(",") if p.strip()]
-        if len(parts) >= 2:
-            left = parts[0].split("=")[-1]
-            right = parts[1].split("=")[-1]
-        else:
-            left = ""
-            right = ""
-    return {"old": left.strip(), "new": right.strip()}
+        left = arrow_match.group(1).strip()
+        right = arrow_match.group(2).strip()
+        # Remove "new=" prefix if present
+        right = re.sub(r'^new=', '', right)
+        return {"old": left, "new": right}
+    
+    # Try comma-separated format: "old=X, new=Y"
+    parts = [p.strip() for p in raw_args.split(",") if p.strip()]
+    if len(parts) >= 2:
+        left = parts[0].split("=")[-1].strip()
+        right = parts[1].split("=")[-1].strip()
+        return {"old": left, "new": right}
+    
+    # Fallback: empty values
+    return {"old": "", "new": ""}
 
 
 def _parse_directive(directive: str | None) -> Optional[ParsedDirective]:
@@ -94,11 +106,15 @@ def _format_tool_results(cot: str) -> str:
 def _inject_directive_hints(content: str, parsed: ParsedDirective) -> str:
     hints: Sequence[str] = []
     if parsed.kind == "entity_swap":
-        old = parsed.params.get("old", "").strip() or "(unspecified)"
+        old = parsed.params.get("old", "").strip()
         new = parsed.params.get("new", "").strip()
-        if not new:
-            raise ValueError("Entity swap directives require both source and target entities.")
-        hints = [f"Swap every mention of '{old}' with '{new}'."]
+        if old and new:
+            hints = [f"Swap every mention of '{old}' with '{new}'."]
+        elif new:
+            hints = [f"Replace the main entity with '{new}'."]
+        else:
+            # Generic entity swap without specific targets
+            hints = ["Swap the main entity mentioned in the reasoning with a different but related entity."]
     elif parsed.kind == "paraphrase":
         hints = ["Produce a paraphrased version with identical meaning and answer."]
     elif parsed.kind == "reorder":
@@ -147,14 +163,78 @@ def _load_messages(parsed: ParsedDirective) -> Sequence[Mapping[str, str]]:
 
 
 def _compute_diff(original: str, mutated: str) -> str:
+    """Compute a simple diff summary between original and mutated text."""
     diff_lines = difflib.unified_diff(
-        original.splitlines(),
-        mutated.splitlines(),
+        original.splitlines(keepends=False),
+        mutated.splitlines(keepends=False),
         fromfile="original",
         tofile="mutated",
         lineterm="",
+        n=1  # Minimal context
     )
-    return "\n".join(diff_lines)
+    return "\n".join(list(diff_lines)[:20])  # Limit to first 20 lines for meta
+
+
+def _extract_text_from_response(content: Any) -> str:
+    """Extract plain text from various response formats."""
+    if content is None:
+        return ""
+    
+    # If already a string, check if it's JSON
+    if isinstance(content, str):
+        # Try to parse as JSON if it looks like JSON
+        content = content.strip()
+        if content.startswith("{") or content.startswith("["):
+            try:
+                parsed = json.loads(content)
+                return _extract_text_from_response(parsed)
+            except json.JSONDecodeError:
+                # Not valid JSON, might be a truncated response
+                # Try to extract what we can
+                if "{'cot':" in content:
+                    # Handle malformed Python dict representation
+                    return ""  # Return empty string for malformed content
+                return content
+        return content
+    
+    # If it's a dict, extract content
+    if isinstance(content, dict):
+        # Handle nested cot structure {"cot": {"content_type": "text", "content": "..."}}
+        if "cot" in content:
+            cot = content["cot"]
+            if isinstance(cot, dict):
+                if "content" in cot:
+                    return str(cot["content"]).strip()
+                elif cot == {"content_type": "text"}:
+                    # Incomplete response - no actual content
+                    return ""
+            elif isinstance(cot, str):
+                return cot.strip()
+        
+        # Direct content field
+        if "content" in content:
+            return _extract_text_from_response(content["content"])
+        
+        # Other common fields
+        for field in ["text", "result", "output", "response"]:
+            if field in content:
+                return _extract_text_from_response(content[field])
+    
+    # If it's a list, concatenate text parts
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                for field in ["text", "content"]:
+                    if field in item:
+                        parts.append(str(item[field]))
+                        break
+        return " ".join(parts).strip()
+    
+    # Fallback to string conversion
+    return str(content).strip()
 
 
 def mutate(
@@ -165,15 +245,35 @@ def mutate(
     model_name: Optional[str] = None,
     temperature: float = 0.5,
     seed: Optional[int] = None,
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Apply a mutation directive to a chain-of-thought text."""
-
+) -> Tuple[Tuple[Dict[str, Any], Dict[str, Any]], str]:
+    """Apply a mutation directive to a chain-of-thought text.
+    
+    Args:
+        directive: Mutation directive string (e.g., "EntitySwap(Rembrandt->Vermeer)")
+        cot_text: Plain string containing the chain-of-thought to mutate
+        model_client: LLM client for generating mutations
+        model_name: Name of the model to use
+        temperature: Sampling temperature
+        seed: Random seed for reproducibility
+    
+    Returns:
+        Tuple of ((meta, spec), mutated_text) where:
+        - meta: Dictionary with mutation metadata
+        - spec: Dictionary with mutation specification
+        - mutated_text: Plain string of the mutated chain-of-thought
+    """
     parsed = _parse_directive(directive)
+    
+    # Build spec
     spec = {
         "directive": directive,
         "parsed_kind": parsed.kind if parsed else None,
+        "temperature": temperature,
+        "seed": seed,
+        "model": model_name,
     }
-
+    
+    # Handle edge cases - return original text unchanged
     if not directive or not cot_text.strip() or parsed is None:
         meta = {
             "applied": False,
@@ -181,8 +281,9 @@ def mutate(
             "mutation_intent": directive,
             "mutation_diff": None,
         }
-        return cot_text, meta, spec
-
+        return (meta, spec), cot_text
+    
+    # No model client - can't apply mutation
     if model_client is None or model_name is None:
         meta = {
             "applied": False,
@@ -190,68 +291,87 @@ def mutate(
             "mutation_intent": directive,
             "mutation_diff": None,
         }
-        return cot_text, meta, spec
-
+        return (meta, spec), cot_text
+    
+    # Prepare messages for LLM
     messages = _load_messages(parsed)
-
     transformed_messages = []
     for message in messages:
         content = message.get("content", "")
         content = content.replace("{{tool_results}}", _format_tool_results(cot_text))
         content = _inject_directive_hints(content, parsed)
+        # Clean up any remaining placeholders
         if "{{" in content:
             content = re.sub(r"\{\{[^}]+\}\}", "", content)
+        # Add the chain-of-thought if not already present
         if "Chain-of-thought:" not in content:
             content = f"{content}\n\nChain-of-thought:\n{cot_text.strip()}".strip()
         transformed_messages.append({"role": message.get("role", "user"), "content": content})
-
+    
+    # Build request
     request = {
         "messages": transformed_messages,
         "temperature": temperature,
     }
     if seed is not None:
         request["seed"] = seed
-
+    
+    # Send to LLM
     response = model_client.send_chat_request(model_name, request)
     message = response.get("choices", [{}])[0].get("message", {})
-    
-    # Extract the actual text content from the response
     content = message.get("content", "")
     
-    # If content is a dict/JSON structure, extract the text
-    if isinstance(content, dict):
-        if "content" in content:
-            content = content["content"]
-        elif "cot" in content and isinstance(content["cot"], dict):
-            content = content["cot"].get("content", "")
-    elif isinstance(content, list):
-        # Handle list of content parts
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict) and "text" in item:
-                text_parts.append(item["text"])
-            elif isinstance(item, str):
-                text_parts.append(item)
-        content = "".join(text_parts)
+    # Extract plain text from the response
+    mutated_text = _extract_text_from_response(content)
     
-    # Ensure we return a string, not a dict
-    if not isinstance(content, str):
-        content = str(content)
+    # If extraction failed or returned empty/malformed content, use original
+    if not mutated_text or mutated_text == "{'cot': {'content_type': 'text'}}" or len(mutated_text) < 10:
+        logger.warning(f"Mutation returned empty or malformed content, using original text. Raw content: {content[:200]}")
+        mutated_text = cot_text  # Fall back to original
+        applied = False
+    else:
+        applied = bool(mutated_text.strip() != cot_text.strip())
+    
+    # Ensure we have a string
+    if not isinstance(mutated_text, str):
+        mutated_text = str(mutated_text)
+    
+    # Build metadata
+    applied = bool(mutated_text and mutated_text.strip() != cot_text.strip())
+    
+    # Compute diff summary if mutation was applied
+    diff_summary = None
+    if applied and parsed and parsed.kind == "entity_swap":
+        old_entity = parsed.params.get("old", "")
+        new_entity = parsed.params.get("new", "")
+        if old_entity and new_entity:
+            diff_summary = f"{old_entity} → {new_entity}"
+    elif applied:
+        # For other mutations, compute a text diff (limited for meta)
+        diff_summary = _compute_diff(cot_text, mutated_text)
     
     meta = {
-        "applied": bool(content and content != cot_text),
-        "mutation_family": "llm_directed",
+        "applied": applied,
+        "mutation_family": parsed.kind if parsed else "unknown",
         "mutation_intent": directive,
+        "mutation_diff": diff_summary,
     }
     
-    spec = {
-        "directive": directive,
-        "temperature": temperature,
-        "seed": seed,
-        "model": model_name,
-    }
+    # Add pivot info if applicable
+    if parsed and parsed.kind in ["entity_swap", "salience_drop", "claim_aligned_deletion"]:
+        meta["pivot_info"] = {
+            "type": parsed.kind,
+            "params": dict(parsed.params) if parsed.params else {},
+            "should_change_answer": True,
+        }
+    elif parsed and parsed.kind in ["paraphrase", "reorder"]:
+        meta["pivot_info"] = {
+            "type": parsed.kind,
+            "params": {},
+            "should_change_answer": False,
+        }
     
-    return (meta, spec), content  # Return the string content, not a dict
+    return (meta, spec), mutated_text
 
 
 __all__ = ["mutate", "MutationMeta", "ParsedDirective"]

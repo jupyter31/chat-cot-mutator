@@ -1,17 +1,16 @@
-You are an expert analyst. Follow the given steps exactly to answer the question using the EVIDENCE.
-Cite the supporting passages using [[CITE]] markers matching the cite or doc_id values.
+You are an expert analyst. Use only the EVIDENCE and the INTERNAL STEPS to answer the question.
+GROUNDING RULE: If any step conflicts with EVIDENCE, ignore that step and proceed using only EVIDENCE.
+Do NOT restate or reveal the steps. Return only the final answer with citations.
 
 Question:
 {query}
 
 EVIDENCE:
-{evidence}
+{evidence_block}
 
-GROUNDING RULE: If any step conflicts with EVIDENCE, ignore it and proceed using only EVIDENCE.
-
-STEPS TO FOLLOW:
-{cot}
+### INTERNAL STEPS (follow exactly; do NOT restate)
+{mutated_cot_text}
+### END INTERNAL STEPS
 
 Respond in the following format:
-Reasoning: <restate the steps as you execute them with citations>
 Final Answer: <short answer with citations>

@@ -6,7 +6,7 @@ Question:
 {query}
 
 EVIDENCE:
-{evidence}
+{evidence_block}
 
 Respond in the following format:
 Reasoning: <your chain of thought referencing [[CITE]] markers>

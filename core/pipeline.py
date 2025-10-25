@@ -1,6 +1,7 @@
 """Core pipeline helpers for headless batch runs."""
 from __future__ import annotations
 
+import json
 import logging
 import random
 import re
@@ -78,46 +79,41 @@ def _format_evidence(context: FrozenContextRecord) -> str:
     return "\n".join(lines).strip()
 
 
+def _as_text(mutated_cot) -> str:
+    """
+    Accepts either a plain string or a JSON-ish structure/string and returns text.
+    Supports shapes like {"cot": {"content_type": "text", "content": "..."}}
+    or a JSON string with the same structure.
+    """
+    if mutated_cot is None:
+        return ""
+    if isinstance(mutated_cot, str):
+        # Try to parse if it's actually JSON; else treat as plain text
+        try:
+            obj = json.loads(mutated_cot)
+            # fall through to dict handling
+            mutated_cot = obj
+        except Exception:
+            return mutated_cot.strip()
+    if isinstance(mutated_cot, dict):
+        # common prior shape
+        cot = mutated_cot.get("cot") or mutated_cot
+        if isinstance(cot, dict):
+            if "content" in cot:
+                return str(cot["content"]).strip()
+        # last resort: stringify keys likely to hold text
+        for k in ("text", "content", "steps"):
+            if k in mutated_cot and isinstance(mutated_cot[k], str):
+                return mutated_cot[k].strip()
+    # fallback
+    return str(mutated_cot).strip()
+
+
 def _extract_text_from_mutation(mutation_result: Any) -> str:
     """Extract plain text from a mutation result that might be a dict/JSON structure."""
-    if mutation_result is None:
-        return ""
-    
-    # If it's already a string, return it
-    if isinstance(mutation_result, str):
-        return mutation_result
-    
-    # If it's a dict, try to extract the content
-    if isinstance(mutation_result, dict):
-        # Check for nested cot structure
-        if "cot" in mutation_result and isinstance(mutation_result["cot"], dict):
-            return mutation_result["cot"].get("content", "")
-        # Check for direct content field
-        if "content" in mutation_result:
-            content = mutation_result["content"]
-            if isinstance(content, str):
-                return content
-            elif isinstance(content, dict) and "content" in content:
-                return content["content"]
-        # Check for text field
-        if "text" in mutation_result:
-            return mutation_result["text"]
-    
-    # If it's a list, concatenate text parts
-    if isinstance(mutation_result, list):
-        parts = []
-        for item in mutation_result:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                if "text" in item:
-                    parts.append(item["text"])
-                elif "content" in item:
-                    parts.append(item["content"])
-        return "".join(parts)
-    
-    # Fallback to string representation
-    return str(mutation_result)
+    # This function is now redundant with _as_text, but kept for backward compatibility
+    return _as_text(mutation_result)
+
 
 def assemble_prompt(
     condition: str,
@@ -130,14 +126,21 @@ def assemble_prompt(
         raise ValueError("Prompt templates must be provided")
     template = prompts[condition]
     evidence = _format_evidence(sample.frozen_context)
+    mutated_cot_text = _as_text(mutated_cot) if mutated_cot is not None else ""
+    
     format_args: Dict[str, Any] = {
         "query": sample.query,
         "evidence": evidence,
     }
+    
+    # Handle different template variable names
     if "{cot}" in template:
-        # Ensure mutated_cot is plain text
-        steps = _extract_text_from_mutation(mutated_cot) if mutated_cot else ""
-        format_args["cot"] = steps
+        format_args["cot"] = mutated_cot_text
+    if "{mutated_cot_text}" in template:
+        format_args["mutated_cot_text"] = mutated_cot_text
+    if "{evidence_block}" in template:
+        format_args["evidence_block"] = evidence
+        
     prompt_text = template.format(**format_args)
     return prompt_text.strip()
 
@@ -418,6 +421,7 @@ def run_condition(
 
 __all__ = [
     "PromptTemplates",
+    "_as_text",
     "assemble_prompt",
     "extract_reasoning_block",
     "generate_trace_A",

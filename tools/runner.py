@@ -81,16 +81,31 @@ def _resolve_conditions(value: Optional[str]) -> List[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
-def _determine_mutation(sample: SampleRecord, policy: str, idx: int) -> Optional[str]:
+def _determine_mutation(sample: SampleRecord, policy: str, idx: int, custom_mutations: Optional[List[str]] = None) -> Optional[str]:
     policy = policy or "pivotal"
+    
     if policy == "pivotal":
         return sample.mutation_directive
-    if policy == "control":
+    elif policy == "control":
         options = ["Paraphrase()", "Reorder()"]
         return options[idx % len(options)]
-    if policy == "none":
+    elif policy == "none":
         return None
-    raise ValueError(f"Unknown mutation policy: {policy}")
+    elif policy == "custom" and custom_mutations:
+        # Use custom list of mutations, cycling through them
+        return custom_mutations[idx % len(custom_mutations)]
+    elif policy == "random" and custom_mutations:
+        # Random selection from custom mutations (deterministic with seed)
+        import random
+        return random.choice(custom_mutations)
+    elif policy in ["EntitySwap", "SalienceDrop", "TopicDilution", "Claim-AlignedDeletion", "Paraphrase", "Reorder"]:
+        # Single mutation type for all samples
+        if policy in ["EntitySwap", "SalienceDrop", "TopicDilution", "Claim-AlignedDeletion"]:
+            return f"{policy}()"
+        else:
+            return f"{policy}()"
+    else:
+        raise ValueError(f"Unknown mutation policy: {policy}. Valid options: 'pivotal', 'control', 'none', 'custom', 'random', or specific mutation names.")
 
 
 def _create_model_client(model_spec: str):
@@ -493,7 +508,8 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
         logger.info("")
         logger.info(f"Sample {idx+1}/{len(samples)}: {sample.id}")
         replay_client = ReplayToolClient(sample.frozen_context.tool_outputs)
-        mutation_override = _determine_mutation(sample, mutation_policy, idx)
+        custom_mutations = config.get("custom_mutations")
+        mutation_override = _determine_mutation(sample, mutation_policy, idx, custom_mutations)
         sample_results = run_sample(
             sample,
             model_client,

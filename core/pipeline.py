@@ -176,20 +176,12 @@ def assemble_messages(
     if tool_variant not in {"direct", "function_call"}:
         raise ValueError(f"Unsupported tool_variant: {tool_variant}")
 
-    if tool_variant == "direct":
-        for entry in evidence_entries:
-            payload = json.dumps(entry, ensure_ascii=False)
-            messages.append(
-                {
-                    "role": evidence_channel,
-                    "name": "evidence_passage",
-                    "content": payload,
-                }
-            )
-    else:
-        for idx, entry in enumerate(evidence_entries):
-            call_id = f"tool_call_{idx}"
-            arguments = json.dumps(entry, ensure_ascii=False)
+    for idx, entry in enumerate(evidence_entries):
+        payload = json.dumps(entry, ensure_ascii=False)
+        needs_tool_call = tool_variant == "function_call" or evidence_channel == "tool"
+        call_id = f"tool_call_{idx}"
+
+        if needs_tool_call:
             messages.append(
                 {
                     "role": "assistant",
@@ -200,20 +192,25 @@ def assemble_messages(
                             "type": "function",
                             "function": {
                                 "name": "evidence_passage",
-                                "arguments": arguments,
+                                "arguments": payload,
                             },
                         }
                     ],
                 }
             )
-            messages.append(
-                {
-                    "role": evidence_channel,
-                    "name": "evidence_passage",
-                    "tool_call_id": call_id,
-                    "content": arguments,
-                }
-            )
+
+        tool_message: Dict[str, Any] = {
+            "role": evidence_channel,
+            "name": "evidence_passage",
+            "content": payload,
+        }
+
+        if needs_tool_call:
+            tool_message["tool_call_id"] = call_id
+            if evidence_channel == "tool":
+                tool_message["role"] = "tool"
+
+        messages.append(tool_message)
 
     if condition in {"C", "D"} and mutated_cot_text:
         messages.append(

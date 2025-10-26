@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from typing import List, Dict, Any, Iterator
-from .base_llm_client import BaseLLMClient
+from .base_llm_client import BaseLLMClient, ChatResult
 import json
 import time
 
@@ -93,7 +93,7 @@ class HuggingFaceClient(BaseLLMClient):
             formatted_text += "Assistant:"
             return formatted_text
     
-    def send_chat_request(self, model_name: str, request: Dict[str, Any]) -> Dict[str, Any]:
+    def send_chat_request(self, model_name: str, request: Dict[str, Any]) -> ChatResult:
         """Send a single chat completion request"""
         messages = request.get("messages", [])
         max_tokens = request.get("max_tokens", 1000)
@@ -124,20 +124,28 @@ class HuggingFaceClient(BaseLLMClient):
             # Remove any remaining special tokens for Phi-3
             generated_text = generated_text.replace("<|end|>", "").strip()
         
-        # Format response to match OpenAI API structure
-        return {
+        raw_response = {
             "choices": [{
                 "message": {
                     "role": "assistant",
-                    "content": generated_text
+                    "content": generated_text,
                 },
-                "finish_reason": "stop"
+                "finish_reason": "stop",
             }],
             "usage": {
                 "prompt_tokens": len(self.tokenizer.encode(formatted_prompt)),
                 "completion_tokens": len(self.tokenizer.encode(generated_text)),
-                "total_tokens": len(self.tokenizer.encode(formatted_prompt)) + len(self.tokenizer.encode(generated_text))
-            }
+                "total_tokens": len(self.tokenizer.encode(formatted_prompt))
+                + len(self.tokenizer.encode(generated_text)),
+            },
+        }
+        return {
+            "text": generated_text,
+            "usage": raw_response["usage"],
+            "raw": raw_response,
+            "reasoning_text": None,
+            "process_tokens": None,
+            "flags": {"leak_think": False},
         }
     
     def send_batch_chat_request(self, model_name: str, batch_requests: List[Dict[str, Any]], batch_size: int = 5) -> List[str]:
@@ -159,8 +167,12 @@ class HuggingFaceClient(BaseLLMClient):
                     print(f"Error processing request: {e}")
                     # Create error response
                     batch_responses.append({
-                        "choices": [{"message": {"role": "assistant", "content": None}}],
-                        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                        "text": "",
+                        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        "raw": {},
+                        "reasoning_text": None,
+                        "process_tokens": None,
+                        "flags": {"leak_think": False},
                     })
             
             results.extend(batch_responses)
@@ -175,9 +187,8 @@ class HuggingFaceClient(BaseLLMClient):
         result_contents = []
         for r in results:
             try:
-                content = r["choices"][0]["message"]["content"]
-                result_contents.append(content)
-            except:
+                result_contents.append(r.get("text"))
+            except Exception:
                 result_contents.append(None)
         
         return result_contents

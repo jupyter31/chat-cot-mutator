@@ -318,9 +318,22 @@ def mutate(
     
     # Send to LLM
     response = model_client.send_chat_request(model_name, request)
-    message = response.get("choices", [{}])[0].get("message", {})
-    content = message.get("content", "")
-    
+    content = ""
+    if isinstance(response, Mapping):
+        text = response.get("text")
+        if isinstance(text, str):
+            content = text
+        else:
+            raw = response.get("raw")
+            if isinstance(raw, Mapping):
+                choices = raw.get("choices")
+                if isinstance(choices, list) and choices:
+                    message = choices[0].get("message")
+                    if isinstance(message, Mapping):
+                        maybe_content = message.get("content")
+                        if isinstance(maybe_content, str):
+                            content = maybe_content
+
     # Extract plain text from the response
     mutated_text = _extract_text_from_response(content)
     

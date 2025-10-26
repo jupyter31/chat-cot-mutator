@@ -4,7 +4,12 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict
+
+try:  # Python 3.11+
+    from typing import NotRequired
+except ImportError:  # pragma: no cover - for very old Python versions
+    from typing_extensions import NotRequired  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +59,24 @@ def retry_on_error(max_retries: int = 3, initial_wait: float = 30.0):
     return decorator
 
 
+class ChatResult(TypedDict):
+    """Standardized response payload returned by :class:`BaseLLMClient`."""
+
+    text: str
+    usage: Dict[str, Any]
+    raw: Dict[str, Any]
+    reasoning_text: NotRequired[Optional[str]]
+    process_tokens: NotRequired[Optional[int]]
+    flags: NotRequired[Dict[str, Any]]
+
+
 class BaseLLMClient(ABC):
     """Abstract base class for LLM clients."""
 
     @abstractmethod
     def send_chat_request(
         self, model_name: str, request: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> ChatResult:
         """Send a chat completion request."""
         pass
 
@@ -69,4 +85,4 @@ class BaseLLMClient(ABC):
         pass
 
 
-__all__ = ["BaseLLMClient", "retry_on_error"]
+__all__ = ["BaseLLMClient", "ChatResult", "retry_on_error"]

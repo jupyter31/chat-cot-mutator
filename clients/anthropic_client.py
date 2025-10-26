@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterator
 
 import anthropic
 
-from .base_llm_client import BaseLLMClient, retry_on_error
+from .base_llm_client import BaseLLMClient, ChatResult, retry_on_error
 
 
 class AnthropicClient(BaseLLMClient):
@@ -15,7 +15,7 @@ class AnthropicClient(BaseLLMClient):
     @retry_on_error(max_retries=3, initial_wait=30.0)
     def send_chat_request(
         self, model_name: str, request: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> ChatResult:
         """Send a chat completion request with retry logic for 429/503."""
         # Convert OpenAI-style request to Anthropic format
         messages = request["messages"]
@@ -36,13 +36,13 @@ class AnthropicClient(BaseLLMClient):
             messages=user_messages,
         )
         
-        # Convert Anthropic response to OpenAI-like format
-        return {
+        content = response.content[0].text if response.content else ""
+        raw_payload = {
             "choices": [
                 {
                     "message": {
                         "role": "assistant",
-                        "content": response.content[0].text,
+                        "content": content,
                     },
                     "finish_reason": response.stop_reason,
                 }
@@ -52,6 +52,14 @@ class AnthropicClient(BaseLLMClient):
                 "completion_tokens": response.usage.output_tokens,
                 "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
             },
+        }
+        return {
+            "text": content.strip(),
+            "usage": raw_payload["usage"],
+            "raw": raw_payload,
+            "reasoning_text": None,
+            "process_tokens": None,
+            "flags": {"leak_think": False},
         }
     
     def send_batch_chat_request(self, model_name: str, batch_requests: List[Dict[str, Any]], batch_size: int = 5) -> List[str]:

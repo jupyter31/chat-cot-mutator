@@ -401,10 +401,30 @@ def _execute_condition(
     )
     request = _build_request(messages, temperature, seed)
     start_time = time.time()
-    response = model_client.send_chat_request(model_name, request)
+    chat_result = model_client.send_chat_request(model_name, request)
     latency = time.time() - start_time
-    message = response.get("choices", [{}])[0].get("message", {}) if isinstance(response, Mapping) else {}
-    content = _coerce_message_content(message)
+    raw_response = chat_result.get("raw") if isinstance(chat_result, Mapping) else {}
+    usage = chat_result.get("usage") if isinstance(chat_result, Mapping) else {}
+    if not isinstance(usage, Mapping):
+        usage = {}
+    message: Mapping[str, Any] = {}
+    if isinstance(raw_response, Mapping):
+        choices = raw_response.get("choices")
+        if isinstance(choices, list) and choices:
+            maybe_message = choices[0].get("message")
+            if isinstance(maybe_message, Mapping):
+                message = maybe_message
+    if not message:
+        message = {"content": chat_result.get("text") if isinstance(chat_result, Mapping) else ""}
+
+    content = ""
+    if isinstance(chat_result, Mapping):
+        candidate = chat_result.get("text")
+        if isinstance(candidate, str):
+            content = candidate
+    if not content:
+        content = _coerce_message_content(message)
+    content = content.strip()
     citations = _extract_citations(content)
     final_answer = _extract_final_answer(content)
     final_answer_text = _strip_citations(final_answer)
@@ -425,8 +445,6 @@ def _execute_condition(
     else:
         judge_result["answer_correct"] = None
 
-    usage = response.get("usage", {}) if isinstance(response, Mapping) else {}
-
     final_prompt = _find_last_user_content(messages)
 
     base_record = {
@@ -440,14 +458,17 @@ def _execute_condition(
         "citations": citations,
         "judge": judge_result,
         "latency_s": latency,
-        "usage": usage,
+        "usage": dict(usage),
+        "process_tokens": chat_result.get("process_tokens") if isinstance(chat_result, Mapping) else None,
+        "response_flags": dict(chat_result.get("flags") or {}) if isinstance(chat_result, Mapping) else {},
     }
     raw_payload = {
         "request": request,
-        "response": response,
+        "response": raw_response,
         "message": message,
+        "chat_result": chat_result,
     }
-    return base_record, raw_payload
+    return base_record, raw_payload, chat_result
 
 
 def generate_trace_A(
@@ -461,7 +482,7 @@ def generate_trace_A(
     judge_client=None,
     judge_model: Optional[str] = None,
 ) -> Dict[str, Any]:
-    base_record, raw_payload = _execute_condition(
+    base_record, raw_payload, chat_result = _execute_condition(
         sample,
         "A",
         prompts,
@@ -472,10 +493,43 @@ def generate_trace_A(
         judge_client=judge_client,
         judge_model=judge_model,
     )
-    trace = extract_reasoning_block(raw_payload.get("message", {}))
+    trace_source = "none"
+    trace = ""
+    flags: Dict[str, Any] = {}
+    if isinstance(chat_result, Mapping):
+        flags = dict(chat_result.get("flags") or {})
+        candidate = chat_result.get("reasoning_text")
+        if isinstance(candidate, str) and candidate.strip():
+            trace = candidate.strip()
+            trace_source = "think_stream"
+    if not trace:
+        fallback_target: Any = raw_payload.get("message")
+        if not fallback_target and isinstance(chat_result, Mapping):
+            fallback_target = chat_result.get("text")
+        extracted = extract_reasoning_block(fallback_target)
+        if extracted:
+            trace = extracted
+            trace_source = "explicit_block"
+    reasoning_chars = len(trace)
+    process_tokens = chat_result.get("process_tokens") if isinstance(chat_result, Mapping) else None
+    if trace and isinstance(chat_result, Mapping):
+        visible = chat_result.get("text")
+        if isinstance(visible, str) and trace in visible:
+            flags["leak_think"] = True
+
+    base_record["trace_A"] = trace
+    base_record["trace_A_source"] = trace_source
+    base_record["trace_A_reasoning_chars"] = reasoning_chars
+    base_record["process_tokens"] = process_tokens
+    base_record["response_flags"] = flags
+
     return {
         "record": base_record,
         "trace_A": trace,
+        "trace_A_source": trace_source,
+        "trace_A_reasoning_chars": reasoning_chars,
+        "process_tokens": process_tokens,
+        "flags": flags,
         "final_answer_A": base_record["final_answer"],
         "final_answer_text_A": base_record["final_answer_text"],
         "raw_A": raw_payload.get("message"),
@@ -511,7 +565,7 @@ def run_condition(
     if seed is not None:
         random.seed(seed)
 
-    base_record, raw_payload = _execute_condition(
+    base_record, raw_payload, chat_result = _execute_condition(
         sample,
         condition,
         prompts,
@@ -528,10 +582,13 @@ def run_condition(
     record["baseline_cot_used"] = baseline_cot_used
     record["directive"] = directive
     record["baseline_cot"] = baseline_cot if condition == "A" else None
-    record["raw_response"] = raw_payload.get("message")
+    message = raw_payload.get("message")
+    if not message and isinstance(chat_result, Mapping):
+        message = {"content": chat_result.get("text")}
+    record["raw_response"] = message
 
     if condition == "A":
-        record["trace_A"] = extract_reasoning_block(raw_payload.get("message", {}))
+        record["trace_A"] = base_record.get("trace_A") or extract_reasoning_block(message or {})
         record["mutation_type"] = mutation_type or "baseline"
     elif condition == "B":
         record["mutation_type"] = mutation_type or "answer_only"

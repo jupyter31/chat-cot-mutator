@@ -31,6 +31,10 @@ _REASONING_PATTERN = re.compile(
     r"Reasoning:\s*(?P<body>.+?)\s*Final Answer:", re.IGNORECASE | re.DOTALL
 )
 
+_THINK_TAG_PATTERN = re.compile(
+    r"<think>\s*(?P<body>.+?)\s*</think>", re.IGNORECASE | re.DOTALL
+)
+
 
 def _strip_citations(text: str) -> str:
     return _CITE_BRACKETS.sub(" ", text or "").strip()
@@ -166,10 +170,46 @@ def assemble_messages(
     mutated_cot_text = _as_text(mutated_cot) if mutated_cot is not None else ""
 
     messages: List[Dict[str, Any]] = []
+    
+    # Extract instructions and question from template
+    # Instructions are everything except the {query} placeholder
+    # We'll split on "Question:" or similar patterns to separate them
+    format_args: Dict[str, Any] = {
+        "query": sample.query,
+        "evidence": evidence_text,
+    }
+
+    if "{cot}" in template:
+        format_args["cot"] = mutated_cot_text
+    if "{mutated_cot_text}" in template:
+        format_args["mutated_cot_text"] = mutated_cot_text
+    if "{evidence_block}" in template:
+        format_args["evidence_block"] = evidence_text
+
+    # Format the complete template to get instructions text
+    full_text = template.format(**format_args).strip()
+    
+    # Extract instructions by replacing the actual query with a marker
+    # and splitting on it to get the instructions portion
+    instructions_text = template.replace("{query}", "").strip()
+    
+    # Build system message with all instructions
+    system_content_parts = []
+    
+    # Add base system prompt if exists
     system_prompt = (prompts.system_prompt or "").strip()
     if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
+        system_content_parts.append(system_prompt)
+    
+    # Add condition-specific instructions
+    system_content_parts.append(instructions_text)
+    
+    messages.append({"role": "system", "content": "\n\n".join(system_content_parts)})
+    
+    # Add first user message with just the question
+    messages.append({"role": "user", "content": f"Question: {sample.query}"})
 
+    # Add evidence as tool messages
     tool_variant = (prompts.tool_variant or "direct").lower()
     evidence_channel = prompts.evidence_channel or "tool"
 
@@ -212,29 +252,26 @@ def assemble_messages(
 
         messages.append(tool_message)
 
+    # Add final user message repeating just the question
+    messages.append({"role": "user", "content": f"Question: {sample.query}"})
+    
+    # For conditions C and D, inject mutated CoT as assistant message
+    # This simulates the model having already "thought through" the problem
+    # The model will then continue to generate the final answer
     if condition in {"C", "D"} and mutated_cot_text:
-        messages.append(
-            {
-                "role": prompts.cot_injection_channel or "system",
-                "name": "cot_instructions",
-                "content": mutated_cot_text,
-            }
-        )
-
-    format_args: Dict[str, Any] = {
-        "query": sample.query,
-        "evidence": evidence_text,
-    }
-
-    if "{cot}" in template:
-        format_args["cot"] = mutated_cot_text
-    if "{mutated_cot_text}" in template:
-        format_args["mutated_cot_text"] = mutated_cot_text
-    if "{evidence_block}" in template:
-        format_args["evidence_block"] = evidence_text
-
-    prompt_text = template.format(**format_args).strip()
-    messages.append({"role": "user", "content": prompt_text})
+        # Wrap the mutated CoT in <think> tags if not already present
+        if not mutated_cot_text.strip().startswith("<think>"):
+            cot_content = f"<think>\n{mutated_cot_text}\n</think>"
+        else:
+            cot_content = mutated_cot_text
+        
+        messages.append({
+            "role": "assistant",
+            "content": cot_content,
+        })
+    
+    return messages
+    
     return messages
 
 
@@ -316,6 +353,12 @@ def extract_reasoning_block(text_or_dict: Any) -> str:
     else:
         candidate_text = str(text_or_dict or "")
 
+    # Try <think> tags first (new format)
+    think_match = _THINK_TAG_PATTERN.search(candidate_text)
+    if think_match:
+        return think_match.group("body").strip()
+    
+    # Fall back to "Reasoning:" pattern (old format)
     match = _REASONING_PATTERN.search(candidate_text)
     if match:
         return match.group("body").strip()
@@ -392,6 +435,7 @@ def _execute_condition(
     baseline_cot: Optional[str] = None,
     judge_client=None,
     judge_model: Optional[str] = None,
+    grounding_threshold: float = 0.95,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     messages = assemble_messages(
         condition,
@@ -438,6 +482,7 @@ def _execute_condition(
         llm_client=judge_client if judge_model else None,
         llm_model=judge_model,
         query=sample.query,
+        grounding_threshold=grounding_threshold,
     )
     logger.debug(f"      Grounding result: {judge_result['is_grounded']}")
     if sample.answer_gold:
@@ -481,6 +526,7 @@ def generate_trace_A(
     seed: Optional[int] = None,
     judge_client=None,
     judge_model: Optional[str] = None,
+    grounding_threshold: float = 0.95,
 ) -> Dict[str, Any]:
     base_record, raw_payload, chat_result = _execute_condition(
         sample,
@@ -492,6 +538,7 @@ def generate_trace_A(
         seed=seed,
         judge_client=judge_client,
         judge_model=judge_model,
+        grounding_threshold=grounding_threshold,
     )
     trace_source = "none"
     trace = ""
@@ -557,6 +604,7 @@ def run_condition(
     mutation_meta: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None,
     mutation_type: Optional[str] = None,
     directive: Optional[str] = None,
+    grounding_threshold: float = 0.95,
 ) -> Dict[str, Any]:
     """Run a single condition for a sample."""
     if condition not in {"A", "B", "C", "D"}:
@@ -576,6 +624,7 @@ def run_condition(
         baseline_cot=baseline_cot,
         judge_client=judge_client,
         judge_model=judge_model,
+        grounding_threshold=grounding_threshold,
     )
 
     record = dict(base_record)

@@ -165,6 +165,7 @@ class RunnerConfig:
     baseline_cot_source: str = "generate"
     reuse_cached_A_cots: bool = True
     cot_cache_dir: Path | None = None
+    grounding_threshold: float = 0.95
     run_id: str = ""
 
 
@@ -420,6 +421,7 @@ def run_sample(
             seed=cfg.seed_value,
             judge_client=judge_client,
             judge_model=judge_model,
+            grounding_threshold=cfg.grounding_threshold,
         )
         baseline_cot = a_result.get("trace_A") or ""
         source = "generated"
@@ -471,6 +473,7 @@ def run_sample(
                 baseline_cot_used=source,
                 mutation_type="answer_only",
                 directive=directive,
+                grounding_threshold=cfg.grounding_threshold,
             )
             results.append(record)
         elif condition in {"C", "D"}:
@@ -506,6 +509,7 @@ def run_sample(
                 mutation_meta=(meta, spec),
                 mutation_type=_infer_mutation_type(directive),
                 directive=directive,
+                grounding_threshold=cfg.grounding_threshold,
             )
             results.append(record)
         else:

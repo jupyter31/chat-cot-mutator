@@ -166,6 +166,7 @@ def judge_grounding(
     llm_client: Any = None,
     llm_model: Optional[str] = None,
     query: Optional[str] = None,
+    grounding_threshold: float = 0.95,
 ) -> Dict[str, Any]:
     """
     Two-stage groundedness judge:
@@ -200,7 +201,7 @@ def judge_grounding(
             if overlap > max_overlap:
                 max_overlap = overlap
         return {
-            "is_grounded": max_overlap >= 0.2,  # tunable
+            "is_grounded": max_overlap >= grounding_threshold,
             "method": "heuristic_fallback",
             "citations_provided": citations,
             "num_passages": len(passages),
@@ -224,9 +225,9 @@ def judge_grounding(
     )
     
     # Determine if grounded based on average score
-    # Threshold: average score >= 0.7 means grounded
+    # Threshold: configurable via grounding_threshold parameter
     avg_score = scoring_result.get("average_score", 0.0)
-    is_grounded = avg_score >= 0.7
+    is_grounded = avg_score >= grounding_threshold
     
     result = {
         "is_grounded": is_grounded,

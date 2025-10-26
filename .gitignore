@@ -1,14 +1,75 @@
-__pycache__
-__pycache__/*
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
 
+# Virtual environments
+venv/
+env/
+ENV/
 .venv
-.venv/*
+.env
 
-feature_testing
-feature_testing/*
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-outputs
-outputs/*
+# Project specific - ignore contents but keep folders
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep
 
-test_data
-test_data/*
+# Logs
+*.log
+logs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment files
+.env
+.env.local
+
+# Cache
+.cache/
+*.cache
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Model files (usually large)
+*.pkl
+*.pth
+*.h5
+*.ckpt
+*.safetensors
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# API keys and secrets
+secrets/
+*.key
+*.pem
+credentials.json

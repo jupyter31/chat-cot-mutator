@@ -4,9 +4,25 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from core.schema import FrozenPassageRecord
+
+
+def _response_text(response: Mapping[str, Any]) -> str:
+    text = response.get("text") if isinstance(response, Mapping) else ""
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    raw = response.get("raw") if isinstance(response, Mapping) else None
+    if isinstance(raw, Mapping):
+        choices = raw.get("choices")
+        if isinstance(choices, list) and choices:
+            message = choices[0].get("message")
+            if isinstance(message, Mapping):
+                content = message.get("content")
+                if isinstance(content, str):
+                    return content.strip()
+    return ""
 
 
 def _normalize_text(s: str) -> str:
@@ -72,9 +88,8 @@ def _extract_claims(
     
     try:
         response = llm_client.send_chat_request(model_name, request)
-        message = response.get("choices", [{}])[0].get("message", {})
-        content = message.get("content", "").strip()
-        
+        content = _response_text(response)
+
         # Parse JSON claims from response
         claims = json.loads(content)
         return claims if isinstance(claims, list) else []
@@ -117,8 +132,7 @@ def _score_claims(
     
     try:
         response = llm_client.send_chat_request(model_name, request)
-        message = response.get("choices", [{}])[0].get("message", {})
-        content = message.get("content", "").strip()
+        content = _response_text(response)
         
         # Extract scores from "Final Scores:" section
         scores = []

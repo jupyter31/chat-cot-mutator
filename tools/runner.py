@@ -230,6 +230,10 @@ def _save_to_cache(
         "citations_A": payload.get("citations_A"),
         "judge_A": payload.get("judge_A"),
         "latency_s": payload.get("latency_s"),
+        "trace_A_source": payload.get("trace_A_source"),
+        "trace_A_reasoning_chars": payload.get("trace_A_reasoning_chars"),
+        "process_tokens": payload.get("process_tokens"),
+        "flags": payload.get("flags"),
         "record": payload.get("record"),
     }
     meta_tmp = meta_path.with_suffix(meta_path.suffix + ".tmp")
@@ -251,6 +255,10 @@ def _load_cached_a_result(
     data = json.loads(meta_path.read_text(encoding="utf-8"))
     if "trace_A" not in data:
         data["trace_A"] = cache_path.read_text(encoding="utf-8") if cache_path.exists() else ""
+    data.setdefault("trace_A_source", "unknown")
+    data.setdefault("trace_A_reasoning_chars", len(data.get("trace_A") or ""))
+    data.setdefault("process_tokens", None)
+    data.setdefault("flags", {})
     return data
 
 
@@ -267,6 +275,32 @@ def _extract_final_answer_from_text(text: str) -> str:
 
 def _strip_citations(text: str) -> str:
     return _CITE_BLOCK.sub("", text or "").strip()
+
+
+def _normalize_a_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+    trace = payload.get("trace_A") or ""
+    payload["trace_A"] = trace
+    payload.setdefault("trace_A_source", "generated")
+    payload.setdefault("trace_A_reasoning_chars", len(trace))
+    payload.setdefault("process_tokens", None)
+    flags = payload.get("flags")
+    if not isinstance(flags, dict):
+        flags = {}
+    payload["flags"] = dict(flags)
+    record = payload.get("record")
+    if isinstance(record, dict):
+        record.setdefault("trace_A", trace)
+        record.setdefault("trace_A_source", payload["trace_A_source"])
+        record.setdefault("trace_A_reasoning_chars", payload["trace_A_reasoning_chars"])
+        record.setdefault("process_tokens", payload.get("process_tokens"))
+        existing_flags = record.get("response_flags")
+        if not isinstance(existing_flags, dict):
+            existing_flags = {}
+        merged_flags = dict(existing_flags)
+        merged_flags.update(payload["flags"])
+        record["response_flags"] = merged_flags
+        payload["record"] = record
+    return payload
 
 
 def _build_sample_a_result(
@@ -314,10 +348,19 @@ def _build_sample_a_result(
         },
         "latency_s": 0.0,
         "usage": {},
+        "process_tokens": None,
+        "response_flags": {"leak_think": False},
+        "trace_A": reasoning,
+        "trace_A_source": "sample",
+        "trace_A_reasoning_chars": len(reasoning or ""),
     }
-    return {
+    payload = {
         "record": record,
         "trace_A": reasoning,
+        "trace_A_source": "sample",
+        "trace_A_reasoning_chars": len(reasoning or ""),
+        "process_tokens": None,
+        "flags": {"leak_think": False},
         "final_answer_A": record["final_answer"],
         "final_answer_text_A": record["final_answer_text"],
         "raw_A": {"role": "assistant", "content": response_text},
@@ -326,6 +369,7 @@ def _build_sample_a_result(
         "judge_A": record["judge"],
         "latency_s": record["latency_s"],
     }
+    return _normalize_a_result(payload)
 
 
 def _append_common_metadata(record: Dict[str, Any], cfg: RunnerConfig) -> None:
@@ -379,13 +423,16 @@ def run_sample(
         )
         baseline_cot = a_result.get("trace_A") or ""
         source = "generated"
+        a_result = _normalize_a_result(a_result)
         _save_to_cache(cfg, model_name, sample.id, a_result)
     else:
         if baseline_cot is None:
             baseline_cot = a_result.get("trace_A") or ""
+        a_result = _normalize_a_result(a_result)
 
     source = source or "generated"
     a_result["trace_A"] = baseline_cot or ""
+    a_result = _normalize_a_result(a_result)
 
     results: List[Dict[str, Any]] = []
     mutated_bundle: Optional[Tuple[str, Dict[str, Any], Dict[str, Any]]] = None
@@ -400,6 +447,13 @@ def run_sample(
             record["mutation_type"] = "baseline"
             record["directive"] = directive
             record["raw_response"] = a_result["raw_A"]
+            record["trace_A_source"] = a_result.get("trace_A_source")
+            record["trace_A_reasoning_chars"] = a_result.get("trace_A_reasoning_chars")
+            record.setdefault("process_tokens", a_result.get("process_tokens"))
+            existing_flags = record.get("response_flags") if isinstance(record.get("response_flags"), dict) else {}
+            merged_flags = dict(existing_flags)
+            merged_flags.update(a_result.get("flags") or {})
+            record["response_flags"] = merged_flags
             results.append(record)
         elif condition == "B":
             record = run_condition(

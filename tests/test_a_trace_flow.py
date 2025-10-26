@@ -33,14 +33,26 @@ class FakeModelClient:
         has_internal_steps = any(m.get("name") == "cot_instructions" for m in messages)
 
         if has_internal_steps:
-            content = "Reasoning: following steps [[C1]]\nFinal Answer: mutated [[C2]]"
+            reasoning = None
+            content = "Final Answer: mutated [[C2]]"
         elif "Final Answer:" in prompt and "Reasoning:" not in prompt:
+            reasoning = None
             content = "Final Answer: answer [[C1]]"
         else:
-            content = "Reasoning: baseline step [[C1]]\nFinal Answer: baseline [[C1]]"
-        return {
+            reasoning = "baseline step [[C1]]"
+            content = "Final Answer: baseline [[C1]]"
+
+        raw = {
             "choices": [{"message": {"content": content}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+        return {
+            "text": content,
+            "usage": raw["usage"],
+            "raw": raw,
+            "reasoning_text": reasoning,
+            "process_tokens": None,
+            "flags": {"leak_think": False},
         }
 
 
@@ -86,6 +98,7 @@ def test_generated_trace_reused_in_mutations(tmp_path: Path, sample_jsonl: Path)
     assert a_record["trace_A"], "Expected non-empty trace for generated baseline"
     baseline_trace = a_record["trace_A"]
     assert all(r["baseline_cot_used"] == "generated" for r in records)
+    assert a_record["trace_A_source"] == "think_stream"
 
     # Ensure evidence passages are emitted as tool messages
     a_request_messages = fake.requests[0][1]["messages"]
@@ -127,6 +140,7 @@ def test_sample_provided_trace_used_when_requested(tmp_path: Path, sample_jsonl:
     records = result["results"]
     a_record = next(r for r in records if r["condition"] == "A")
     assert a_record["trace_A"] == baseline
+    assert a_record["trace_A_source"] == "sample"
     assert all(r["baseline_cot_used"] == "sample" for r in records)
     for condition in ("C", "D"):
         record = next(r for r in records if r["condition"] == condition)

@@ -16,21 +16,34 @@ class MockModelClient:
         self.calls += 1
         if any(message.get("name") == "cot_instructions" for message in request["messages"]):
             mutated = "Mutated chain-of-thought [mock]"
-            return {
+            raw = {
                 "choices": [{"message": {"content": mutated}}],
                 "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+            }
+            return {
+                "text": mutated,
+                "usage": raw["usage"],
+                "raw": raw,
+                "reasoning_text": None,
+                "process_tokens": None,
+                "flags": {"leak_think": False},
             }
 
         user_prompt = request["messages"][-1]["content"]
         match = re.search(r"\[([^\]]+)\]", user_prompt)
         cite = match.group(1) if match else "EVIDENCE"
-        content = (
-            f"Reasoning: rely on [[{cite}]] to answer.\n"
-            f"Final Answer: placeholder [[{cite}]]"
-        )
-        return {
-            "choices": [{"message": {"content": content}}],
+        final = f"Final Answer: placeholder [[{cite}]]"
+        raw = {
+            "choices": [{"message": {"content": final}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+        return {
+            "text": final,
+            "usage": raw["usage"],
+            "raw": raw,
+            "reasoning_text": f"rely on [[{cite}]] to answer.",
+            "process_tokens": None,
+            "flags": {"leak_think": False},
         }
 
     def send_batch_chat_request(self, model_name, batch_requests, batch_size=5):  # pragma: no cover

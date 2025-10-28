@@ -16,6 +16,9 @@ Usage:
     
     # Using local vLLM server
     client = create_llm_client("vllm", base_url="http://localhost:8000/v1")
+    
+    # Using local Ollama
+    client = create_llm_client("ollama", base_url="http://localhost:11434", model_id="phi3:medium")
 """
 
 from typing import Dict, Any
@@ -26,9 +29,10 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
     Factory function to create LLM clients
     
     Args:
-        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "vllm")
+        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "phi", "vllm", "ollama")
         **kwargs: Provider-specific configuration
                  For vllm: base_url (default "http://localhost:8000/v1"), api_key (default "EMPTY")
+                 For ollama: base_url (default "http://localhost:11434"), model_id (required)
         
     Returns:
         BaseLLMClient: An instance of the appropriate LLM client
@@ -87,10 +91,19 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "vLLM client requires 'openai' package. Install with: pip install openai"
             )
     
+    elif provider == "ollama":
+        try:
+            from .ollama_client import OllamaClient
+            return OllamaClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "Ollama client requires 'requests' package. Install with: pip install requests"
+            )
+    
     else:
         raise ValueError(
             f"Unsupported provider: {provider}. "
-            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm"
+            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm, ollama"
         )
 
 

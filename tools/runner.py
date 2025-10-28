@@ -127,11 +127,25 @@ def _determine_mutation(sample: SampleRecord, policy: str, idx: int, custom_muta
         raise ValueError(f"Unknown mutation policy: {policy}. Valid options: 'pivotal', 'control', 'none', 'custom', 'random', or specific mutation names.")
 
 
-def _create_model_client(model_spec: str):
+def _create_model_client(model_spec: str, config: Optional[Dict[str, Any]] = None):
+    """Create model client based on model specification.
+    
+    Args:
+        model_spec: Model specification string (e.g., "ollama:phi4-reasoning:latest")
+        config: Optional config dict with timeout_s and other settings
+        
+    Returns:
+        Tuple of (client, model_name)
+    """
     provider = model_spec
     model_name = model_spec
     if ":" in model_spec:
         provider, model_name = model_spec.split(":", 1)
+
+    # Get timeout from config if available (especially important for reasoning models)
+    timeout_s = 300  # Default for reasoning models
+    if config:
+        timeout_s = int(config.get("timeout_s", 300))
 
     client = None
     try:
@@ -146,7 +160,24 @@ def _create_model_client(model_spec: str):
     if client is None:
         from clients.client_factory import create_llm_client
 
-        client = create_llm_client(provider, endpoint=None)
+        # Special handling for ollama - pass model_id and timeout
+        if provider == "ollama":
+            client = create_llm_client(
+                "ollama",
+                base_url="http://localhost:11434",
+                model_id=model_name,
+                timeout_s=timeout_s
+            )
+            logger.info(f"Created Ollama client with timeout={timeout_s}s")
+        # Special handling for vLLM - use default or custom URL
+        elif provider == "vllm":
+            client = create_llm_client(
+                "vllm",
+                base_url="http://localhost:8000/v1",  # vLLM default
+                api_key="EMPTY"
+            )
+        else:
+            client = create_llm_client(provider, endpoint=None)
     return client, model_name
 
 
@@ -556,7 +587,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
 
     model_spec = config.get("model") or "openai:gpt-4o"
     if model_client is None:
-        model_client, resolved_model_name = _create_model_client(model_spec)
+        model_client, resolved_model_name = _create_model_client(model_spec, config)
         logger.info(f"✓ Created model client: {resolved_model_name}")
     else:
         resolved_model_name = model_spec.split(":", 1)[1] if ":" in model_spec else model_spec

@@ -271,8 +271,6 @@ def assemble_messages(
         })
     
     return messages
-    
-    return messages
 
 
 def _as_text(mutated_cot) -> str:

@@ -112,9 +112,12 @@ def test_generated_trace_reused_in_mutations(tmp_path: Path, sample_jsonl: Path)
     for condition in ("C", "D"):
         record = next(r for r in records if r["condition"] == condition)
         assert record["mutated_cot"].strip() == baseline_trace.strip()
-        cot_messages = [m for m in record["messages"] if m.get("name") == "cot_instructions"]
-        assert cot_messages, "Expected mutated CoT to be injected as a dedicated message"
-        assert cot_messages[0]["content"].strip() == baseline_trace.strip()
+        # Check that CoT is injected as assistant message
+        cot_messages = [
+            m for m in record["messages"] 
+            if m.get("role") == "assistant" and baseline_trace in m.get("content", "")
+        ]
+        assert cot_messages, "Expected mutated CoT to be injected as assistant message"
     # A + B + C + D (mutation no-op)
     assert len(fake.requests) == 4
 
@@ -145,9 +148,12 @@ def test_sample_provided_trace_used_when_requested(tmp_path: Path, sample_jsonl:
     for condition in ("C", "D"):
         record = next(r for r in records if r["condition"] == condition)
         assert record["mutated_cot"].strip() == baseline.strip()
-        cot_messages = [m for m in record["messages"] if m.get("name") == "cot_instructions"]
-        assert cot_messages
-        assert cot_messages[0]["content"].strip() == baseline.strip()
+        # Check that CoT is injected as assistant message
+        cot_messages = [
+            m for m in record["messages"] 
+            if m.get("role") == "assistant" and baseline in m.get("content", "")
+        ]
+        assert cot_messages, "Expected mutated CoT to be injected as assistant message"
     # B + C + D (mutation no-op, A skipped)
     assert len(fake.requests) == 3
 

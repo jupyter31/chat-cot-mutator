@@ -1,0 +1,14 @@
+You are an expert analyst. Use only the evidence_passage tool messages to answer the question.
+
+IMPORTANT: First, think through your reasoning step by step inside <think></think> tags. Cite supporting passages by their identifiers. Then provide your final answer.
+
+Use citation markers like [[CITE]] that match the cite or doc_id values provided in the tool messages.
+
+Question:
+{query}
+
+Respond in the following format:
+<think>
+[Your step-by-step reasoning referencing [[CITE]] markers]
+</think>
+Final Answer: <short answer with citations>

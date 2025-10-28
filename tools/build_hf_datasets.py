@@ -16,6 +16,7 @@ except ImportError:
 from core.schema import (
     FrozenContextRecord,
     FrozenPassageRecord,
+    FrozenToolRecord,
     SampleRecord,
     save_jsonl,
 )
@@ -151,15 +152,26 @@ def build_webgpt_from_url(split: str = "train") -> Iterable[SampleRecord]:
     
     samples_count = 0
     for q, passages, sample_id, side in _iter_raw_pairs(response.iter_lines(decode_unicode=True)):
+        # Convert passages to synthetic tool outputs to simulate browser searches
+        tool_outputs = []
+        for passage in passages:
+            tool_outputs.append(
+                FrozenToolRecord(
+                    tool="browser_search",
+                    input=passage.cite,  # The source URL/title as search query
+                    output=passage.text,  # The extracted text as result
+                )
+            )
+        
         sample = SampleRecord(
             id=f"webgpt-{sample_id}-{side}",
             query=q,
-            frozen_context=FrozenContextRecord(passages=passages, tool_outputs=[]),
+            frozen_context=FrozenContextRecord(passages=passages, tool_outputs=tool_outputs),
             cot_baseline=None,
             mutation_directive=None,
             grounding_rule="If any step conflicts with EVIDENCE, ignore it and use only EVIDENCE.",
             answer_gold=None,
-            meta={"dataset": "webgpt", "side": side},
+            meta={"dataset": "webgpt", "side": side, "simulated_tools": True},
         )
         samples_count += 1
         yield sample
@@ -177,15 +189,26 @@ def build_webgpt_samples(split: str = "train") -> Iterable[SampleRecord]:
         # Use HF format processor
         samples_count = 0
         for q, passages, sample_id, side in _iter_hf_rows(dataset):
+            # Convert passages to synthetic tool outputs to simulate browser searches
+            tool_outputs = []
+            for passage in passages:
+                tool_outputs.append(
+                    FrozenToolRecord(
+                        tool="browser_search",
+                        input=passage.cite,  # The source URL/title as search query
+                        output=passage.text,  # The extracted text as result
+                    )
+                )
+            
             sample = SampleRecord(
                 id=f"webgpt-{sample_id}-{side}",
                 query=q,
-                frozen_context=FrozenContextRecord(passages=passages, tool_outputs=[]),
+                frozen_context=FrozenContextRecord(passages=passages, tool_outputs=tool_outputs),
                 cot_baseline=None,
                 mutation_directive=None,
                 grounding_rule="If any step conflicts with EVIDENCE, ignore it and use only EVIDENCE.",
                 answer_gold=None,
-                meta={"dataset": "webgpt", "side": side},
+                meta={"dataset": "webgpt", "side": side, "simulated_tools": True},
             )
             samples_count += 1
             yield sample
@@ -202,25 +225,33 @@ def build_webgpt_samples(split: str = "train") -> Iterable[SampleRecord]:
 def _hotpot_gold_passages(row: dict) -> List[FrozenPassageRecord]:
     """Extract gold passages from HotpotQA row."""
     passages: List[FrozenPassageRecord] = []
-    context_data = row.get("context", [])
+    context_data = row.get("context", {})
     
-    # Build context map
+    # Build context map - context is now a dict with 'title' and 'sentences' keys
+    context_titles = context_data.get("title", [])
+    context_sentences = context_data.get("sentences", [])
+    
     context_map = {}
-    for item in context_data:
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            title = item[0]
-            sentences = item[1] if len(item) == 2 else item[1:]
-            if isinstance(sentences, list):
-                context_map[title] = sentences
-            elif isinstance(sentences, str):
-                context_map[title] = [sentences]
+    for title, sentences in zip(context_titles, context_sentences):
+        if isinstance(sentences, list):
+            context_map[title] = sentences
+        elif isinstance(sentences, str):
+            context_map[title] = [sentences]
     
-    # Get supporting facts
-    supporting_facts = row.get("supporting_facts", [])
+    # Get supporting facts - now a dict with 'title' and 'sent_id' keys
+    supporting_facts = row.get("supporting_facts", {})
     gold_titles = set()
-    for item in supporting_facts:
-        if isinstance(item, (list, tuple)) and len(item) >= 1:
-            gold_titles.add(item[0])
+    
+    if isinstance(supporting_facts, dict):
+        # New format: {'title': ['Title1', 'Title2'], 'sent_id': [0, 1]}
+        titles_list = supporting_facts.get("title", [])
+        if isinstance(titles_list, list):
+            gold_titles = set(titles_list)
+    elif isinstance(supporting_facts, list):
+        # Old format: [['Title1', 0], ['Title2', 1]]
+        for item in supporting_facts:
+            if isinstance(item, (list, tuple)) and len(item) >= 1:
+                gold_titles.add(item[0])
     
     # Build passages from gold titles
     for title in sorted(gold_titles):
@@ -256,6 +287,12 @@ def build_hotpot_samples(split: str = "validation") -> Iterable[SampleRecord]:
     samples_count = 0
     skipped_count = 0
     
+    # Debug first row to understand structure
+    if len(dataset) > 0:
+        first_row = dataset[0]
+        LOGGER.debug(f"First row keys: {list(first_row.keys())}")
+        LOGGER.debug(f"First row sample: {first_row}")
+    
     for idx, row in enumerate(dataset):
         question = (row.get("question") or "").strip()
         if not question:
@@ -267,14 +304,32 @@ def build_hotpot_samples(split: str = "validation") -> Iterable[SampleRecord]:
         
         if not passages:
             skipped_count += 1
-            LOGGER.debug(f"Row {idx}: No gold passages found")
+            if idx < 5:  # Log first few failures
+                LOGGER.debug(f"Row {idx}: No gold passages found")
+                LOGGER.debug(f"  supporting_facts: {row.get('supporting_facts')}")
+                context = row.get('context', {})
+                if isinstance(context, dict):
+                    LOGGER.debug(f"  context titles: {context.get('title', [])[:2]}")
+                else:
+                    LOGGER.debug(f"  context sample: {context[:2] if context else None}")
             continue
         
         sample_id = row.get("id") or f"{idx:06d}"
         if not sample_id.startswith("hotpot-"):
             sample_id = f"hotpot-{sample_id}"
         
-        context = FrozenContextRecord(passages=passages, tool_outputs=[])
+        # Convert passages to synthetic tool outputs to simulate agentic retrieval
+        tool_outputs = []
+        for idx_p, passage in enumerate(passages):
+            tool_outputs.append(
+                FrozenToolRecord(
+                    tool="wiki_search",
+                    input=passage.cite,  # Use the Wikipedia title as the search query
+                    output=passage.text,  # The article text as the result
+                )
+            )
+        
+        context = FrozenContextRecord(passages=passages, tool_outputs=tool_outputs)
         sample = SampleRecord(
             id=sample_id,
             query=question,
@@ -283,7 +338,7 @@ def build_hotpot_samples(split: str = "validation") -> Iterable[SampleRecord]:
             mutation_directive=None,
             grounding_rule="If any step conflicts with EVIDENCE, ignore it.",
             answer_gold=answer or None,
-            meta={"dataset": "hotpot", "num_gold": len(passages)},
+            meta={"dataset": "hotpot", "num_gold": len(passages), "simulated_tools": True},
         )
         
         samples_count += 1

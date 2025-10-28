@@ -13,6 +13,9 @@ Usage:
     
     # Using internal Microsoft API (if available)
     client = create_llm_client("microsoft", endpoint="your-endpoint")
+    
+    # Using local vLLM server
+    client = create_llm_client("vllm", base_url="http://localhost:8000/v1")
 """
 
 from typing import Dict, Any
@@ -23,8 +26,9 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
     Factory function to create LLM clients
     
     Args:
-        provider: The LLM provider ("openai", "anthropic", "microsoft")
+        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "vllm")
         **kwargs: Provider-specific configuration
+                 For vllm: base_url (default "http://localhost:8000/v1"), api_key (default "EMPTY")
         
     Returns:
         BaseLLMClient: An instance of the appropriate LLM client
@@ -52,22 +56,11 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Anthropic client requires 'anthropic' package. Install with: pip install anthropic"
             )
     
-    elif provider == "huggingface" or provider == "phi":
+    elif provider == "huggingface":
         try:
-            from .huggingface_client import HuggingFaceClient, Phi2Client, Phi3Client
+            from .huggingface_client import HuggingFaceClient
             
-            # Handle specific Phi model requests
-            if provider == "phi":
-                model_name = kwargs.get("model_name", "phi-2")
-                if "phi-2" in model_name.lower():
-                    return Phi2Client(**{k: v for k, v in kwargs.items() if k != "model_name"})
-                elif "phi-3" in model_name.lower():
-                    model_size = kwargs.get("model_size", "mini")
-                    return Phi3Client(model_size=model_size, **{k: v for k, v in kwargs.items() if k not in ["model_name", "model_size"]})
-                else:
-                    return HuggingFaceClient(model_name=model_name, **{k: v for k, v in kwargs.items() if k != "model_name"})
-            else:
-                return HuggingFaceClient(**kwargs)
+            return HuggingFaceClient(**kwargs)
         except ImportError:
             raise ImportError(
                 "Hugging Face client requires 'torch' and 'transformers' packages. Install with: pip install torch transformers"
@@ -85,10 +78,19 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Microsoft client requires internal dependencies and authentication"
             )
     
+    elif provider == "vllm":
+        try:
+            from .vllm_client import VLLMClient
+            return VLLMClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "vLLM client requires 'openai' package. Install with: pip install openai"
+            )
+    
     else:
         raise ValueError(
             f"Unsupported provider: {provider}. "
-            f"Supported providers: openai, anthropic, microsoft, huggingface, phi"
+            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm"
         )
 
 

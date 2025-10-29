@@ -212,6 +212,9 @@ def assemble_messages(
     # Add evidence as tool messages
     tool_variant = (prompts.tool_variant or "direct").lower()
     evidence_channel = prompts.evidence_channel or "tool"
+    
+    logger.info(f"[DEBUG] tool_variant={tool_variant}, evidence_channel={evidence_channel}")
+    logger.info(f"[DEBUG] prompts.tool_variant={prompts.tool_variant}, prompts.evidence_channel={prompts.evidence_channel}")
 
     if tool_variant not in {"direct", "function_call"}:
         raise ValueError(f"Unsupported tool_variant: {tool_variant}")
@@ -232,7 +235,7 @@ def assemble_messages(
                             "type": "function",
                             "function": {
                                 "name": "evidence_passage",
-                                "arguments": payload,
+                                "arguments": entry,  # Use dict object, not JSON string
                             },
                         }
                     ],
@@ -242,7 +245,7 @@ def assemble_messages(
         tool_message: Dict[str, Any] = {
             "role": evidence_channel,
             "name": "evidence_passage",
-            "content": payload,
+            "content": payload,  # Keep as JSON string for content
         }
 
         if needs_tool_call:
@@ -380,7 +383,9 @@ def extract_reasoning_block(text_or_dict: Any) -> str:
 
 
 def cache_key_for_A(run_id: str, model_name: str, sample_id: str) -> str:
-    return f"{run_id}__{model_name}__{sample_id}.cot"
+    # Sanitize model_name for filesystem (replace : with -)
+    safe_model_name = model_name.replace(":", "-")
+    return f"{run_id}__{safe_model_name}__{sample_id}.cot"
 
 
 def try_load_cached_A(cfg: Any, model_name: str, sample_id: str) -> Tuple[Optional[str], bool]:
@@ -411,6 +416,8 @@ def _build_request(
     messages: List[Mapping[str, Any]],
     temperature: float,
     seed: Optional[int],
+    condition: str = "",
+    model_name: str = "",
 ) -> MutableMapping[str, Any]:
     request: MutableMapping[str, Any] = {
         "messages": deepcopy(messages),
@@ -418,6 +425,18 @@ def _build_request(
     }
     if seed is not None:
         request["seed"] = seed
+    
+    # Enable thinking mode for reasoning models (DeepSeek R1, etc.)
+    # This captures the model's internal reasoning process in a separate field
+    # For Ollama models, check if it's a reasoning-capable model
+    is_reasoning_model = any(
+        keyword in model_name.lower() 
+        for keyword in ["deepseek-r1", "r1", "reasoning"]
+    )
+    if is_reasoning_model:
+        request["think"] = True
+        logger.debug(f"Enabled think mode for reasoning model: {model_name}")
+    
     return request
 
 
@@ -441,7 +460,7 @@ def _execute_condition(
         mutated_cot=baseline_cot,
         prompts=prompts,
     )
-    request = _build_request(messages, temperature, seed)
+    request = _build_request(messages, temperature, seed, condition, model_name)
     start_time = time.time()
     chat_result = model_client.send_chat_request(model_name, request)
     latency = time.time() - start_time

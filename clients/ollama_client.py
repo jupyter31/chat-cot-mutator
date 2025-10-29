@@ -2,8 +2,17 @@
 Ollama LLM Client
 
 Native Ollama API client for local model inference with streaming support.
-Uses Ollama's /api/chat endpoint for better model-specific feature support.
-
+Uses Ollama's /api/chat endpoint for better model-specific feature supp            response = requests.post(
+                f"{self.base_url}/api/chat",
+                json=body,
+                stream=True,
+                timeout=self.timeout
+            ) as response:
+                # Capture error details before raise_for_status
+                if response.status_code != 200:
+                    error_text = response.text[:1000]
+                    logger.error(f"Ollama returned {response.status_code}: {error_text}")
+                response.raise_for_status()
 Supports:
 - Streaming responses for real-time feedback (reduces perceived latency)
 - DeepSeek R1: thinking mode for CoT capture
@@ -117,6 +126,7 @@ class OllamaClient(BaseLLMClient):
         on_delta = request.get("on_delta")
         extra_options = request.get("options", {})
         keep_alive = request.get("keep_alive")
+        seed = request.get("seed")  # Extract seed if provided
         
         # Use provided model_name or fall back to instance default
         model_to_use = model_name or self.model_id
@@ -137,6 +147,10 @@ class OllamaClient(BaseLLMClient):
             }
         }
         
+        # Add seed if specified (Ollama requires it in options)
+        if seed is not None:
+            body["options"]["seed"] = seed
+        
         # Add max_tokens if specified (Ollama uses num_predict)
         if max_tokens:
             body["options"]["num_predict"] = max_tokens
@@ -153,6 +167,12 @@ class OllamaClient(BaseLLMClient):
         # Stream and aggregate response
         logger.debug(f"Streaming from {self.base_url}/api/chat")
         logger.debug(f"Model: {model_to_use}, Messages: {len(messages)}, Think: {think_mode}, Phi: {phi_tag_mode}")
+        logger.info(f"Request body keys: {list(body.keys())}")
+        logger.info(f"Request model: {body['model']}")
+        logger.info(f"Request options: {body['options']}")
+        if messages:
+            logger.info(f"First message: {messages[0]}")
+            logger.info(f"First message keys: {list(messages[0].keys())}")
         
         t0 = time.time()
         visible_chunks = []
@@ -160,14 +180,20 @@ class OllamaClient(BaseLLMClient):
         done_obj = {}
         
         try:
-            with requests.post(
+            response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=body,
                 stream=True,
                 timeout=self.timeout
-            ) as response:
+            )
+            
+            # Check status and capture error details before streaming
+            if response.status_code != 200:
+                error_text = response.text[:1000]
+                logger.error(f"Ollama returned {response.status_code}: {error_text}")
                 response.raise_for_status()
-                
+            
+            with response:
                 for line in response.iter_lines(decode_unicode=True):
                     if not line:
                         continue
@@ -177,11 +203,6 @@ class OllamaClient(BaseLLMClient):
                     except json.JSONDecodeError:
                         logger.warning(f"Failed to parse chunk: {line[:100]}")
                         continue
-                    
-                    # Check if this is the final chunk
-                    if chunk.get("done"):
-                        done_obj = chunk
-                        break
                     
                     msg = chunk.get("message", {}) or {}
                     
@@ -211,6 +232,11 @@ class OllamaClient(BaseLLMClient):
                             visible_chunks.append(content_delta)
                             if on_delta:
                                 on_delta("content", content_delta)
+                    
+                    # Check if this is the final chunk (after processing its message)
+                    if chunk.get("done"):
+                        done_obj = chunk
+                        break
         
         except requests.exceptions.Timeout:
             elapsed = time.time() - t0
@@ -218,6 +244,13 @@ class OllamaClient(BaseLLMClient):
             raise TimeoutError(f"Ollama request timed out after {elapsed:.1f}s")
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
+            # Try to get more details from the response
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    logger.error(f"Ollama error details: {error_detail}")
+                except:
+                    logger.error(f"Ollama response text: {e.response.text[:500]}")
             raise RuntimeError(f"Ollama request failed: {e}")
         
         elapsed = time.time() - t0
@@ -225,6 +258,10 @@ class OllamaClient(BaseLLMClient):
         # Assemble final text and reasoning
         visible_text = "".join(visible_chunks)
         reasoning_text = "".join(thinking_chunks).strip()
+        
+        logger.info(f"Captured thinking: {len(reasoning_text)} chars, visible: {len(visible_text)} chars")
+        if reasoning_text:
+            logger.debug(f"Thinking preview: {reasoning_text[:200]}...")
         
         # Post-processing: Extract any remaining <think> tags if not in dedicated modes
         if not think_mode and not phi_tag_mode and _THINK_OPEN in visible_text:

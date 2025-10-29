@@ -562,6 +562,18 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     logger.info("Loading prompt templates...")
     repo_root = Path(__file__).resolve().parent.parent
     prompts = _load_prompts(repo_root)
+    
+    # Override prompts with config values if present
+    if "evidence_channel" in config:
+        prompts.evidence_channel = config["evidence_channel"]
+        logger.info(f"✓ Overriding evidence_channel with config value: {prompts.evidence_channel}")
+    if "tool_variant" in config:
+        prompts.tool_variant = config["tool_variant"]
+        logger.info(f"✓ Overriding tool_variant with config value: {prompts.tool_variant}")
+    if "cot_injection_channel" in config:
+        prompts.cot_injection_channel = config["cot_injection_channel"]
+        logger.info(f"✓ Overriding cot_injection_channel with config value: {prompts.cot_injection_channel}")
+    
     logger.info(f"✓ Loaded {len(prompts.condition_to_template)} prompt templates")
     
     logger.info(f"Loading samples from {config['input']}...")

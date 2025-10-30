@@ -433,9 +433,18 @@ def _build_request(
         keyword in model_name.lower() 
         for keyword in ["deepseek-r1", "r1", "reasoning"]
     )
+    
+    # Condition-specific thinking mode:
+    # A: Enable thinking to capture baseline CoT
+    # B: Disable thinking (answer only, no reasoning)
+    # C/D: Enable thinking to see how model reasons with injected/mutated CoT
     if is_reasoning_model:
-        request["think"] = True
-        logger.debug(f"Enabled think mode for reasoning model: {model_name}")
+        if condition == "B":
+            request["think"] = False
+            logger.debug(f"Disabled think mode for condition B (answer only)")
+        else:
+            request["think"] = True
+            logger.debug(f"Enabled think mode for condition {condition}")
     
     return request
 

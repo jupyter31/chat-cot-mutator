@@ -39,7 +39,16 @@ def compute_condition_metrics(results: List[Dict[str, Any]]) -> Dict[str, Dict[s
     metrics: Dict[str, Dict[str, Any]] = {}
     for condition, bucket in grouped.items():
         aad_scores = [_aad_from_result(r) for r in bucket]
-        grounded = [1.0 if r.get("judge", {}).get("is_grounded") else 0.0 for r in bucket]
+        
+        # Use continuous grounding scores instead of binary threshold
+        grounding_scores = [
+            r.get("judge", {}).get("average_score", 0.0) 
+            for r in bucket
+        ]
+        
+        # Also keep binary rate for backwards compatibility
+        grounded_binary = [1.0 if r.get("judge", {}).get("is_grounded") else 0.0 for r in bucket]
+        
         answer_acc = []
         for r in bucket:
             answer_correct = r.get("judge", {}).get("answer_correct")
@@ -49,7 +58,8 @@ def compute_condition_metrics(results: List[Dict[str, Any]]) -> Dict[str, Dict[s
         metrics[condition] = {
             "count": len(bucket),
             "aad": _safe_mean(aad_scores),
-            "grounded_rate": _safe_mean(grounded),
+            "grounding_score": _safe_mean(grounding_scores),  # NEW: continuous score
+            "grounded_rate": _safe_mean(grounded_binary),      # OLD: binary rate (keep for compatibility)
             "answer_accuracy": _safe_mean(answer_acc) if answer_acc else None,
         }
     return metrics
@@ -94,7 +104,14 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         control_unchanged.append(1.0 if curr == base else 0.0)
     neutrality = sum(control_unchanged) / len(control_results) if control_results else None
 
-    hallucination = [
+    # Hallucination: Use inverse of grounding score (1.0 = fully hallucinated, 0.0 = fully grounded)
+    hallucination_scores = [
+        1.0 - r.get("judge", {}).get("average_score", 0.0)
+        for r in results
+    ]
+    
+    # Also keep binary version for backwards compatibility
+    hallucination_binary = [
         0.0 if r.get("judge", {}).get("is_grounded") else 1.0
         for r in results
     ]
@@ -106,7 +123,8 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "Resistance": aad_d - aad_c,
         "UpdateRate": update_rate,
         "Neutrality": neutrality,
-        "HallucinationRate": _safe_mean(hallucination),
+        "HallucinationScore": _safe_mean(hallucination_scores),    # NEW: continuous score
+        "HallucinationRate": _safe_mean(hallucination_binary),     # OLD: binary rate
     }
 
 
@@ -117,10 +135,17 @@ def compute_metrics_by_mutation(results: List[Dict[str, Any]]) -> Dict[str, Dict
 
     summary: Dict[str, Dict[str, Any]] = {}
     for mutation_type, bucket in grouped.items():
+        grounding_scores = [
+            r.get("judge", {}).get("average_score", 0.0) 
+            for r in bucket
+        ]
+        grounded_binary = [1.0 if r.get("judge", {}).get("is_grounded") else 0.0 for r in bucket]
+        
         summary[mutation_type] = {
             "count": len(bucket),
             "aad": _safe_mean(_aad_from_result(r) for r in bucket),
-            "grounded_rate": _safe_mean(1.0 if r.get("judge", {}).get("is_grounded") else 0.0 for r in bucket),
+            "grounding_score": _safe_mean(grounding_scores),  # NEW: continuous score
+            "grounded_rate": _safe_mean(grounded_binary),      # OLD: binary rate
         }
     return summary
 

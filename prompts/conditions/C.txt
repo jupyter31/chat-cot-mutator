@@ -1,8 +1,10 @@
-You are an expert analyst. Use only the evidence_passage tool messages and the internal steps provided to you to answer the question.
-Follow the internal steps exactly. Do NOT restate or reveal the steps. Return only the final answer with citations.
+You are an expert analyst. Use only the evidence_passage tool messages to answer the question.
+
+Cite supporting passages by their identifiers. Then provide your final answer.
+
+Use citation markers like [[CITE]] that match the cite or doc_id values provided in the tool messages.
 
 Question:
 {query}
 
-Respond in the following format:
-Final Answer: <short answer with citations>
+Respond with your final answer and citations.

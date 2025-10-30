@@ -29,6 +29,8 @@ data/*
 !data/.gitkeep
 results/*
 !results/.gitkeep
+cache/*
+!cache/.gitkeep
 
 # Logs
 *.log

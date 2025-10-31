@@ -31,6 +31,7 @@ class MutationMeta:
 _DIRECTIVE_PATTERN = re.compile(r"(?P<name>[A-Za-z_:-]+)\s*(?:\((?P<args>.*)\))?$")
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts" / "mutations"
+COT_PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts" / "cot_mutations"
 
 
 def _normalize_kind(raw: str) -> str:
@@ -129,28 +130,65 @@ def _inject_directive_hints(content: str, parsed: ParsedDirective) -> str:
     return content + hint_block
 
 
-def _load_messages(parsed: ParsedDirective) -> Sequence[Mapping[str, str]]:
+def _load_messages(parsed: ParsedDirective, use_cot_prompts: bool = False) -> Sequence[Mapping[str, str]]:
+    """Load mutation prompt messages.
+    
+    Args:
+        parsed: Parsed mutation directive
+        use_cot_prompts: If True, use CoT-specific prompts instead of tool-based prompts
+    """
     filename = None
     replacements: Mapping[str, str] = {}
-    if parsed.kind == "salience_drop":
-        filename = "salience_drop.jsonl"
-    elif parsed.kind == "claim_aligned_deletion":
-        filename = "claim_aligned_deletion.jsonl"
-        replacements = {"{{number}}": "5"}
-    elif parsed.kind == "topic_dilution":
-        filename = "topic_dilution.jsonl"
-    elif parsed.kind == "entity_swap":
-        filename = "entity_swap.jsonl"
-        replacements = {
-            "{{written_entity_types}}": "names",
-            "{{entity_plural}}": "entity",
-            "{{number}}": "1",
+    base_dir = COT_PROMPT_DIR if use_cot_prompts else PROMPT_DIR
+    
+    if use_cot_prompts:
+        # Map to CoT-specific mutations
+        kind_map = {
+            "entity_swap": "entity_swap.jsonl",
+            "entityswap": "entity_swap.jsonl",
+            "date_number_jitter": "date_number_jitter.jsonl",
+            "datenumberjitter": "date_number_jitter.jsonl",
+            "step_shuffle": "step_shuffle.jsonl",
+            "stepshuffle": "step_shuffle.jsonl",
+            "passage_shuffle": "step_shuffle.jsonl",  # Similar to step shuffle
+            "conclusion_negation": "conclusion_negation.jsonl",
+            "conclusionnegation": "conclusion_negation.jsonl",
+            "evidence_fabrication": "evidence_fabrication.jsonl",
+            "evidencefabrication": "evidence_fabrication.jsonl",
+            "paraphrase": "paraphrase.jsonl",
+            "control": "paraphrase.jsonl",  # Paraphrase is the control mutation
         }
+        filename = kind_map.get(parsed.kind.lower())
+        if filename is None:
+            # Default to paraphrase for unknown mutations
+            filename = "paraphrase.jsonl"
     else:
-        filename = "free_form.jsonl"
-        replacements = {"{{mutation_request}}": parsed.kind.replace("_", " ")}
+        # Original tool-based mutations
+        if parsed.kind == "salience_drop":
+            filename = "salience_drop.jsonl"
+        elif parsed.kind == "claim_aligned_deletion":
+            filename = "claim_aligned_deletion.jsonl"
+            replacements = {"{{number}}": "5"}
+        elif parsed.kind == "topic_dilution":
+            filename = "topic_dilution.jsonl"
+        elif parsed.kind == "entity_swap":
+            filename = "entity_swap.jsonl"
+            replacements = {
+                "{{written_entity_types}}": "names",
+                "{{entity_plural}}": "entity",
+                "{{number}}": "1",
+            }
+        else:
+            filename = "free_form.jsonl"
+            replacements = {"{{mutation_request}}": parsed.kind.replace("_", " ")}
 
-    prompt_path = PROMPT_DIR / filename
+    prompt_path = base_dir / filename
+    if not prompt_path.exists():
+        # Fallback to tool-based if CoT prompt doesn't exist
+        if use_cot_prompts:
+            prompt_path = PROMPT_DIR / "free_form.jsonl"
+            replacements = {"{{mutation_request}}": f"Mutate the reasoning: {parsed.kind.replace('_', ' ')}"}
+    
     lines = prompt_path.read_text(encoding="utf-8").strip().splitlines()
     messages = []
     for line in lines:
@@ -245,6 +283,7 @@ def mutate(
     model_name: Optional[str] = None,
     temperature: float = 0.5,
     seed: Optional[int] = None,
+    question: Optional[str] = None,
 ) -> Tuple[Tuple[Dict[str, Any], Dict[str, Any]], str]:
     """Apply a mutation directive to a chain-of-thought text.
     
@@ -255,6 +294,7 @@ def mutate(
         model_name: Name of the model to use
         temperature: Sampling temperature
         seed: Random seed for reproducibility
+        question: Optional question context for the CoT
     
     Returns:
         Tuple of ((meta, spec), mutated_text) where:
@@ -293,19 +333,20 @@ def mutate(
         }
         return (meta, spec), cot_text
     
-    # Prepare messages for LLM
-    messages = _load_messages(parsed)
+    # Prepare messages for LLM - use CoT-specific prompts
+    messages = _load_messages(parsed, use_cot_prompts=True)
     transformed_messages = []
     for message in messages:
         content = message.get("content", "")
+        # Replace CoT-specific placeholders
+        content = content.replace("{{cot_text}}", cot_text.strip())
+        content = content.replace("{{question}}", question or "")
+        # Legacy placeholder for tool-based mutations (fallback)
         content = content.replace("{{tool_results}}", _format_tool_results(cot_text))
         content = _inject_directive_hints(content, parsed)
         # Clean up any remaining placeholders
         if "{{" in content:
             content = re.sub(r"\{\{[^}]+\}\}", "", content)
-        # Add the chain-of-thought if not already present
-        if "Chain-of-thought:" not in content:
-            content = f"{content}\n\nChain-of-thought:\n{cot_text.strip()}".strip()
         transformed_messages.append({"role": message.get("role", "user"), "content": content})
     
     # Build request
@@ -317,7 +358,19 @@ def mutate(
         request["seed"] = seed
     
     # Send to LLM
-    response = model_client.send_chat_request(model_name, request)
+    try:
+        response = model_client.send_chat_request(model_name, request)
+    except Exception as e:
+        logger.error(f"Mutation LLM call failed: {e}")
+        meta = {
+            "applied": False,
+            "mutation_family": parsed.kind,
+            "mutation_intent": directive,
+            "mutation_diff": None,
+            "error": str(e),
+        }
+        return (meta, spec), cot_text
+    
     content = ""
     if isinstance(response, Mapping):
         text = response.get("text")
@@ -335,11 +388,23 @@ def mutate(
                             content = maybe_content
 
     # Extract plain text from the response
-    mutated_text = _extract_text_from_response(content)
+    try:
+        mutated_text = _extract_text_from_response(content)
+    except Exception as e:
+        logger.error(f"Failed to extract text from mutation response: {e}")
+        meta = {
+            "applied": False,
+            "mutation_family": parsed.kind,
+            "mutation_intent": directive,
+            "mutation_diff": None,
+            "error": f"Text extraction failed: {e}",
+        }
+        return (meta, spec), cot_text
     
-    # If extraction failed or returned empty/malformed content, use original
-    if not mutated_text or mutated_text == "{'cot': {'content_type': 'text'}}" or len(mutated_text) < 10:
-        logger.warning(f"Mutation returned empty or malformed content, using original text. Raw content: {content[:200]}")
+    # If extraction failed or returned empty/malformed content, log and use original
+    if not mutated_text or mutated_text == "{'cot': {'content_type': 'text'}}":
+        logger.warning(f"Mutation returned empty or malformed content. Directive: {directive}")
+        logger.warning(f"Raw response (first 200 chars): {content[:200] if content else '(empty)'}")
         mutated_text = cot_text  # Fall back to original
         applied = False
     else:
@@ -351,6 +416,13 @@ def mutate(
     
     # Build metadata
     applied = bool(mutated_text and mutated_text.strip() != cot_text.strip())
+    
+    # Log if mutation didn't actually change anything (potential issue)
+    if not applied and parsed.kind not in ["paraphrase", "reorder"]:
+        # For non-control mutations, unchanged text might indicate a problem
+        logger.warning(f"Mutation '{directive}' did not change the text. This may indicate a problem.")
+        logger.debug(f"Original text (first 100 chars): {cot_text[:100]}")
+        logger.debug(f"Mutated text (first 100 chars): {mutated_text[:100]}")
     
     # Compute diff summary if mutation was applied
     diff_summary = None

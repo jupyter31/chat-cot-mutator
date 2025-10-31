@@ -20,7 +20,7 @@ from core.schema import (
     FrozenToolRecord,
     SampleRecord,
 )
-from eval.judges import judge_grounding
+from eval.judges import judge_grounding, judge_answer_correctness
 
 
 CitationPattern = re.compile(r"\[\[([^\]]+)\]\]")
@@ -258,10 +258,12 @@ def assemble_messages(
     # Add final user message repeating just the question
     messages.append({"role": "user", "content": f"Question: {sample.query}"})
     
-    # For conditions C and D, inject mutated CoT as assistant message
+    # For conditions C, D, C_prime, D_prime: inject mutated CoT as assistant message
     # This simulates the model having already "thought through" the problem
     # The model will then continue to generate the final answer
-    if condition in {"C", "D"} and mutated_cot_text:
+    # C/D: think=false (use only injected reasoning)
+    # C_prime/D_prime: think=true (model can generate new reasoning after seeing injected CoT)
+    if condition in {"C", "D", "C_prime", "D_prime"} and mutated_cot_text:
         # Wrap the mutated CoT in <think> tags if not already present
         if not mutated_cot_text.strip().startswith("<think>"):
             cot_content = f"<think>\n{mutated_cot_text}\n</think>"
@@ -390,12 +392,27 @@ def cache_key_for_A(run_id: str, model_name: str, sample_id: str) -> str:
 
 def try_load_cached_A(cfg: Any, model_name: str, sample_id: str) -> Tuple[Optional[str], bool]:
     cache_dir = getattr(cfg, "cot_cache_dir", None)
-    run_id = getattr(cfg, "run_id", None)
-    if not cache_dir or not run_id:
+    if not cache_dir:
         return None, False
-    cache_path = Path(cache_dir) / cache_key_for_A(run_id, model_name, sample_id)
-    if cache_path.exists():
-        return cache_path.read_text(encoding="utf-8"), True
+    
+    cache_path = Path(cache_dir)
+    if not cache_path.exists():
+        return None, False
+    
+    # Sanitize model_name for filesystem (replace : with -)
+    safe_model_name = model_name.replace(":", "-")
+    
+    # Search for cache file matching pattern: *__{model_name}__{sample_id}.cot
+    pattern = f"*__{safe_model_name}__{sample_id}.cot"
+    matching_files = list(cache_path.glob(pattern))
+    
+    if matching_files:
+        # Use the most recent file if multiple matches exist
+        matching_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        cache_file = matching_files[0]
+        logger.debug(f"Found cached CoT: {cache_file.name}")
+        return cache_file.read_text(encoding="utf-8"), True
+    
     return None, False
 
 
@@ -436,15 +453,17 @@ def _build_request(
     
     # Condition-specific thinking mode:
     # A: Enable thinking to capture baseline CoT
-    # B: Disable thinking (answer only, no reasoning)
-    # C/D: Enable thinking to see how model reasons with injected/mutated CoT
+    # B/C/D: Disable thinking (no internal reasoning generation)
+    #   - B: Answer only, no reasoning at all
+    #   - C/D: Use only injected CoT, no new reasoning
+    # C_prime/D_prime: Enable thinking to see how model reasons with injected CoT
     if is_reasoning_model:
-        if condition == "B":
-            request["think"] = False
-            logger.debug(f"Disabled think mode for condition B (answer only)")
-        else:
+        if condition in ("A", "C_prime", "D_prime"):
             request["think"] = True
             logger.debug(f"Enabled think mode for condition {condition}")
+        else:
+            request["think"] = False
+            logger.debug(f"Disabled think mode for condition {condition}")
     
     return request
 
@@ -511,10 +530,28 @@ def _execute_condition(
         grounding_threshold=grounding_threshold,
     )
     logger.debug(f"      Grounding result: {judge_result['is_grounded']}")
+    
+    # Judge answer correctness using LLM-based semantic comparison
     if sample.answer_gold:
-        judge_result["answer_correct"] = _answers_match(final_answer, sample.answer_gold)
+        logger.debug(f"      Judging answer correctness (mode: {'llm_semantic' if judge_model else 'token_subset'})...")
+        correctness_result = judge_answer_correctness(
+            predicted_answer=final_answer,
+            gold_answer=sample.answer_gold,
+            question=sample.query,
+            llm_client=judge_client if judge_model else None,
+            llm_model=judge_model,
+        )
+        judge_result["answer_correct"] = correctness_result.get("is_correct")
+        judge_result["answer_correct_explanation"] = correctness_result.get("explanation")
+        judge_result["answer_correct_method"] = correctness_result.get("method")
+        # Include raw response for debugging if available
+        if "raw_response" in correctness_result:
+            judge_result["answer_correct_raw_response"] = correctness_result.get("raw_response")
+        logger.debug(f"      Answer correctness: {judge_result['answer_correct']} (method: {correctness_result.get('method')})")
     else:
         judge_result["answer_correct"] = None
+        judge_result["answer_correct_explanation"] = "No gold answer available"
+        judge_result["answer_correct_method"] = "n/a"
 
     final_prompt = _find_last_user_content(messages)
 

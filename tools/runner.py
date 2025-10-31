@@ -193,6 +193,7 @@ class RunnerConfig:
     judge_mode: str
     judge_model_spec: Optional[str]
     mutation_policy: str
+    mutation_model_spec: Optional[str] = None  # Separate model for mutations
     baseline_cot_source: str = "generate"
     reuse_cached_A_cots: bool = True
     cot_cache_dir: Path | None = None
@@ -418,6 +419,9 @@ def run_sample(
     replay_client: ReplayToolClient,
     *,
     mutation_override: Optional[str] = None,
+    completed_keys: Optional[set] = None,
+    mutation_client=None,
+    mutation_model_name: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     model_name = cfg.resolved_model_name
     directive = mutation_override if mutation_override is not None else sample.mutation_directive
@@ -471,6 +475,12 @@ def run_sample(
     mutated_bundle: Optional[Tuple[str, Dict[str, Any], Dict[str, Any]]] = None
 
     for condition in cfg.conditions:
+        # Skip if already completed in resume mode
+        if completed_keys is not None and (sample.id, condition) in completed_keys:
+            logger.info(f"  ⊙ Skipping condition {condition} (already completed)")
+            continue
+        
+        logger.info(f"  → Processing condition {condition}...")
         replay_client.reset()
         if condition == "A":
             record = dict(a_result["record"])
@@ -507,22 +517,41 @@ def run_sample(
                 grounding_threshold=cfg.grounding_threshold,
             )
             results.append(record)
-        elif condition in {"C", "D"}:
+        elif condition in {"C", "D", "C_prime", "D_prime"}:
             if mutated_bundle is None:
-                meta_and_spec, mutated_text = mutate(
-                    directive,
-                    baseline_cot or "",
-                    model_client=model_client,
-                    model_name=model_name,
-                    temperature=cfg.temperature,
-                    seed=cfg.seed_value,
-                )
-                # Extract plain text from the mutation result
-                mutated_text = _extract_text_from_mutation(mutated_text)
+                # Use mutation client if specified, otherwise use main model client
+                mut_client = mutation_client if mutation_client is not None else model_client
+                mut_model = mutation_model_name if mutation_model_name is not None else model_name
                 
-                # Unpack the tuple properly
-                meta, spec = meta_and_spec
-                mutated_bundle = (mutated_text, meta, spec)
+                logger.info(f"  → Mutating CoT for condition {condition} (directive: {directive})...")
+                logger.info(f"     Using mutation model: {mut_model}")
+                logger.info(f"     This may take several minutes (external LLM call)...")
+                
+                try:
+                    meta_and_spec, mutated_text = mutate(
+                        directive,
+                        baseline_cot or "",
+                        model_client=mut_client,
+                        model_name=mut_model,
+                        temperature=cfg.temperature,
+                        seed=cfg.seed_value,
+                        question=sample.query,  # Pass question for context
+                    )
+                    logger.info(f"  ✓ Mutation completed")
+                    # Extract plain text from the mutation result
+                    mutated_text = _extract_text_from_mutation(mutated_text)
+                    
+                    # Unpack the tuple properly
+                    meta, spec = meta_and_spec
+                    mutated_bundle = (mutated_text, meta, spec)
+                    
+                except Exception as e:
+                    logger.error(f"  ✗ Mutation failed for sample {sample.id}, condition {condition}: {e}")
+                    logger.error(f"     Skipping conditions {condition} for this sample")
+                    # Skip this condition for this sample - do not add to results
+                    # This sample will not contribute to the final grounding score for this condition
+                    continue
+            
             mutated_cot, meta, spec = mutated_bundle
             record = run_condition(
                 sample,
@@ -611,7 +640,10 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     judge_mode = config.get("judge", "prog")
     judge_model_spec = config.get("judge_model")
     mutation_policy = config.get("mutation_policy", "pivotal")
+    mutation_model_spec = config.get("mutation_model")  # Separate model for mutations
     logger.info(f"Settings: temperature={temperature}, seed={seed_value}, mutation_policy={mutation_policy}")
+    if mutation_model_spec:
+        logger.info(f"Mutation model: {mutation_model_spec}")
 
     run_id = _infer_run_id(output_dir)
     baseline_source = _validate_baseline_source(config.get("baseline_cot_source", "generate"))
@@ -629,13 +661,38 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
         judge_mode=judge_mode,
         judge_model_spec=judge_model_spec,
         mutation_policy=mutation_policy,
+        mutation_model_spec=mutation_model_spec,
         baseline_cot_source=baseline_source,
         reuse_cached_A_cots=reuse_cached,
         cot_cache_dir=cache_dir,
         run_id=run_id,
     )
 
+    # Load existing results if resume mode is enabled
+    samples_jsonl = output_dir / "samples.jsonl"
     all_results: List[Dict[str, Any]] = []
+    completed_keys = set()
+    resume_mode = bool(config.get("resume", False))
+    
+    if resume_mode and samples_jsonl.exists():
+        logger.info(f"Resume mode: Loading existing results from {samples_jsonl}...")
+        with samples_jsonl.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    record = json.loads(line)
+                    all_results.append(record)
+                    # Track completed (sample_id, condition) pairs
+                    completed_keys.add((record["sample_id"], record["condition"]))
+        logger.info(f"✓ Loaded {len(all_results)} existing results ({len(completed_keys)} unique sample-condition pairs)")
+    
+    # Create separate mutation client if specified
+    mutation_client = None
+    mutation_model_name = None
+    if cfg.mutation_model_spec:
+        logger.info(f"Creating separate mutation client: {cfg.mutation_model_spec}")
+        mutation_client, mutation_model_name = _create_model_client(cfg.mutation_model_spec, config)
+        logger.info(f"✓ Created mutation client: {mutation_model_name}")
+    
     total_runs = len(samples) * len(conditions)
     logger.info("")
     logger.info(f"Starting {total_runs} condition runs ({len(samples)} samples × {len(conditions)} conditions)")
@@ -655,22 +712,50 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
             cfg,
             replay_client,
             mutation_override=mutation_override,
+            completed_keys=completed_keys if resume_mode else None,
+            mutation_client=mutation_client,
+            mutation_model_name=mutation_model_name,
         )
-        for record in sample_results:
-            _append_common_metadata(record, cfg)
-            all_results.append(record)
+        
+        # Write results incrementally
+        with samples_jsonl.open("a", encoding="utf-8") as f:
+            for record in sample_results:
+                _append_common_metadata(record, cfg)
+                all_results.append(record)
+                # Write immediately to disk
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                logger.debug(f"✓ Wrote result for {record['sample_id']} condition {record['condition']}")
+        
+        # Log sample completion summary
+        mutation_conditions = [c for c in conditions if c in {"C", "D", "C_prime", "D_prime"}]
+        if mutation_conditions:
+            completed_mutations = [r for r in sample_results if r['condition'] in mutation_conditions]
+            expected_mutations = len(mutation_conditions)
+            if len(completed_mutations) < expected_mutations:
+                logger.warning(f"  ⚠ Sample {sample.id}: Only {len(completed_mutations)}/{expected_mutations} mutation conditions completed")
+                skipped = set(mutation_conditions) - {r['condition'] for r in completed_mutations}
+                logger.warning(f"     Skipped conditions: {sorted(skipped)}")
 
     logger.info("")
     logger.info("="*60)
-    logger.info("All condition runs completed. Writing outputs...")
+    logger.info("All condition runs completed. Computing metrics...")
+    logger.info(f"✓ Total results: {len(all_results)} (written incrementally to {samples_jsonl})")
     
-    samples_jsonl = output_dir / "samples.jsonl"
-    logger.info(f"Writing samples to {samples_jsonl}...")
-    with samples_jsonl.open("w", encoding="utf-8") as f:
-        for record in all_results:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    logger.info(f"✓ Wrote {len(all_results)} results")
+    # Report mutation success/failure summary
+    mutation_conditions = [c for c in conditions if c in {"C", "D", "C_prime", "D_prime"}]
+    if mutation_conditions:
+        logger.info("")
+        logger.info("Mutation success summary:")
+        for cond in mutation_conditions:
+            cond_results = [r for r in all_results if r['condition'] == cond]
+            expected = len(samples)
+            actual = len(cond_results)
+            if actual < expected:
+                logger.warning(f"  Condition {cond}: {actual}/{expected} samples completed ({expected - actual} failed/skipped)")
+            else:
+                logger.info(f"  Condition {cond}: {actual}/{expected} samples completed ✓")
 
+    logger.info("")
     logger.info("Computing overall metrics...")
     metrics_overall = compute_overall_metrics(all_results)
     (output_dir / "metrics_overall.json").write_text(

@@ -308,11 +308,13 @@ def judge_answer_correctness(
         msg["content"] = content
     
     # Send request to LLM
+    # Note: Use max_completion_tokens for newer OpenAI models (o1, gpt-4o, etc.)
+    # and max_tokens for older models/other providers
     request = {
         "model": llm_model,
         "messages": messages,
         "temperature": 0.0,  # Use deterministic evaluation
-        "max_tokens": 500,
+        "max_completion_tokens": 500,  # For newer OpenAI models
     }
     
     try:

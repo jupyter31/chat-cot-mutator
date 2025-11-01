@@ -158,8 +158,18 @@ def assemble_messages(
     sample: SampleRecord,
     mutated_cot: Optional[str] = None,
     prompts: Optional[PromptTemplates] = None,
+    use_string_arguments: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Assemble chat messages for the given condition."""
+    """Assemble chat messages for the given condition.
+    
+    Args:
+        condition: Condition identifier (A, B, C, D, etc.)
+        sample: Sample record with query and context
+        mutated_cot: Optional mutated CoT text
+        prompts: Prompt templates
+        use_string_arguments: If True, use JSON string for tool_calls arguments (Microsoft/OpenAI).
+                            If False, use dict objects (Ollama). Default: True for compatibility.
+    """
 
     if prompts is None:
         raise ValueError("Prompt templates must be provided")
@@ -225,6 +235,12 @@ def assemble_messages(
         call_id = f"tool_call_{idx}"
 
         if needs_tool_call:
+            # Note: Different APIs expect different formats for tool_calls arguments:
+            # - Microsoft/OpenAI: requires JSON string
+            # - Ollama: accepts either dict or JSON string (more flexible)
+            # Use use_string_arguments parameter to control format
+            arguments_value = json.dumps(entry, ensure_ascii=False) if use_string_arguments else entry
+            
             messages.append(
                 {
                     "role": "assistant",
@@ -235,7 +251,7 @@ def assemble_messages(
                             "type": "function",
                             "function": {
                                 "name": "evidence_passage",
-                                "arguments": entry,  # Use dict object, not JSON string
+                                "arguments": arguments_value,
                             },
                         }
                     ],
@@ -435,20 +451,24 @@ def _build_request(
     seed: Optional[int],
     condition: str = "",
     model_name: str = "",
+    use_streaming: bool = True,
 ) -> MutableMapping[str, Any]:
     request: MutableMapping[str, Any] = {
         "messages": deepcopy(messages),
         "temperature": temperature,
+        "stream": use_streaming,  # Add streaming flag to request
     }
     if seed is not None:
         request["seed"] = seed
     
     # Enable thinking mode for reasoning models (DeepSeek R1, etc.)
     # This captures the model's internal reasoning process in a separate field
-    # For Ollama models, check if it's a reasoning-capable model
-    is_reasoning_model = any(
-        keyword in model_name.lower() 
-        for keyword in ["deepseek-r1", "r1", "reasoning"]
+    # For Ollama models, check if it's a reasoning-capable model that supports the think parameter
+    # Note: phi4-reasoning doesn't support Ollama's think parameter, so we exclude it
+    model_lower = model_name.lower()
+    is_reasoning_model = (
+        ("deepseek-r1" in model_lower or "deepseek" in model_lower) and
+        "phi" not in model_lower
     )
     
     # Condition-specific thinking mode:
@@ -481,16 +501,55 @@ def _execute_condition(
     judge_client=None,
     judge_model: Optional[str] = None,
     grounding_threshold: float = 0.95,
+    use_streaming: bool = True,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    # Detect client type to determine tool_calls argument format
+    # Microsoft/OpenAI clients need JSON strings, Ollama accepts dicts
+    client_class_name = model_client.__class__.__name__
+    use_string_arguments = "Microsoft" in client_class_name or "OpenAI" in client_class_name
+    logger.debug(f"Client type: {client_class_name}, use_string_arguments: {use_string_arguments}")
+    
     messages = assemble_messages(
         condition,
         sample,
         mutated_cot=baseline_cot,
         prompts=prompts,
+        use_string_arguments=use_string_arguments,
     )
-    request = _build_request(messages, temperature, seed, condition, model_name)
+    request = _build_request(messages, temperature, seed, condition, model_name, use_streaming)
     start_time = time.time()
-    chat_result = model_client.send_chat_request(model_name, request)
+    
+    # Check if client supports streaming and if streaming is requested
+    if use_streaming and hasattr(model_client, 'send_stream_chat_completion_request'):
+        logger.debug(f"Using streaming method for {model_name}")
+        # Aggregate streaming response
+        final_data = None
+        for chunk in model_client.send_stream_chat_completion_request(model_name, request):
+            # Chunks are either strings (partial content) or final data dict
+            if isinstance(chunk, dict):
+                final_data = chunk
+        
+        if final_data is None:
+            raise Exception("Streaming request completed but no final data received")
+        
+        # Convert streaming response to ChatResult format
+        content = final_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        chat_result = {
+            "text": content.strip() if content else "",
+            "usage": final_data.get("usage", {}),
+            "raw": final_data,
+            "reasoning_text": final_data.get("reasoning_text"),
+            "process_tokens": final_data.get("process_tokens"),
+            "flags": final_data.get("flags", {"leak_think": False}),
+        }
+    else:
+        # Use non-streaming method (or fallback if streaming not supported)
+        if use_streaming and not hasattr(model_client, 'send_stream_chat_completion_request'):
+            logger.debug(f"Client does not support streaming, falling back to send_chat_request for {model_name}")
+        else:
+            logger.debug(f"Using non-streaming method for {model_name}")
+        chat_result = model_client.send_chat_request(model_name, request)
+    
     latency = time.time() - start_time
     raw_response = chat_result.get("raw") if isinstance(chat_result, Mapping) else {}
     usage = chat_result.get("usage") if isinstance(chat_result, Mapping) else {}
@@ -590,6 +649,7 @@ def generate_trace_A(
     judge_client=None,
     judge_model: Optional[str] = None,
     grounding_threshold: float = 0.95,
+    use_streaming: bool = True,
 ) -> Dict[str, Any]:
     base_record, raw_payload, chat_result = _execute_condition(
         sample,
@@ -602,6 +662,7 @@ def generate_trace_A(
         judge_client=judge_client,
         judge_model=judge_model,
         grounding_threshold=grounding_threshold,
+        use_streaming=use_streaming,
     )
     trace_source = "none"
     trace = ""
@@ -668,6 +729,7 @@ def run_condition(
     mutation_type: Optional[str] = None,
     directive: Optional[str] = None,
     grounding_threshold: float = 0.95,
+    use_streaming: bool = True,
 ) -> Dict[str, Any]:
     """Run a single condition for a sample."""
     if condition not in {"A", "B", "C", "D"}:
@@ -688,6 +750,7 @@ def run_condition(
         judge_client=judge_client,
         judge_model=judge_model,
         grounding_threshold=grounding_threshold,
+        use_streaming=use_streaming,
     )
 
     record = dict(base_record)

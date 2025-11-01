@@ -198,6 +198,7 @@ class RunnerConfig:
     reuse_cached_A_cots: bool = True
     cot_cache_dir: Path | None = None
     grounding_threshold: float = 0.95
+    use_streaming: bool = True  # Enable/disable streaming requests
     run_id: str = ""
 
 
@@ -457,6 +458,7 @@ def run_sample(
             judge_client=judge_client,
             judge_model=judge_model,
             grounding_threshold=cfg.grounding_threshold,
+            use_streaming=cfg.use_streaming,
         )
         baseline_cot = a_result.get("trace_A") or ""
         source = "generated"
@@ -515,6 +517,7 @@ def run_sample(
                 mutation_type="answer_only",
                 directive=directive,
                 grounding_threshold=cfg.grounding_threshold,
+                use_streaming=cfg.use_streaming,
             )
             results.append(record)
         elif condition in {"C", "D", "C_prime", "D_prime"}:
@@ -570,6 +573,7 @@ def run_sample(
                 mutation_type=_infer_mutation_type(directive),
                 directive=directive,
                 grounding_threshold=cfg.grounding_threshold,
+                use_streaming=cfg.use_streaming,
             )
             results.append(record)
         else:
@@ -649,6 +653,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     baseline_source = _validate_baseline_source(config.get("baseline_cot_source", "generate"))
     reuse_cached = bool(config.get("reuse_cached_A_cots", True))
     cache_dir = _resolve_cache_dir(config.get("cot_cache_dir"), run_id)
+    use_streaming = bool(config.get("use_streaming", True))  # Default to True for backward compatibility
 
     cfg = RunnerConfig(
         input_path=input_path,
@@ -665,6 +670,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
         baseline_cot_source=baseline_source,
         reuse_cached_A_cots=reuse_cached,
         cot_cache_dir=cache_dir,
+        use_streaming=use_streaming,
         run_id=run_id,
     )
 

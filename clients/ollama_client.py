@@ -127,6 +127,7 @@ class OllamaClient(BaseLLMClient):
         extra_options = request.get("options", {})
         keep_alive = request.get("keep_alive")
         seed = request.get("seed")  # Extract seed if provided
+        use_streaming = request.get("stream", True)  # Default to True for backward compatibility
         
         # Use provided model_name or fall back to instance default
         model_to_use = model_name or self.model_id
@@ -140,7 +141,7 @@ class OllamaClient(BaseLLMClient):
         body = {
             "model": model_to_use,
             "messages": messages,
-            "stream": True,  # Always stream for better UX
+            "stream": use_streaming,  # Configurable streaming mode
             "options": {
                 "temperature": temperature,
                 **extra_options  # Allow custom options
@@ -164,7 +165,69 @@ class OllamaClient(BaseLLMClient):
         if keep_alive:
             body["keep_alive"] = keep_alive
         
-        # Stream and aggregate response
+        # Non-streaming path (simpler, direct response)
+        if not use_streaming:
+            logger.debug(f"Non-streaming request to {self.base_url}/api/chat")
+            logger.debug(f"Model: {model_to_use}, Messages: {len(messages)}, Think: {think_mode}")
+            
+            t0 = time.time()
+            try:
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=body,
+                    timeout=self.timeout
+                )
+                response.raise_for_status()
+                result = response.json()
+                elapsed = time.time() - t0
+                
+                # Extract message content
+                msg = result.get("message", {}) or {}
+                visible_text = msg.get("content", "")
+                reasoning_text = msg.get("thinking", "").strip() if think_mode else ""
+                
+                # Parse <think> tags if present
+                if phi_tag_mode and _THINK_OPEN in visible_text:
+                    captured, stripped = self._extract_and_strip_think(visible_text)
+                    if captured:
+                        reasoning_text = (reasoning_text + "\n" + captured).strip() if reasoning_text else captured
+                        visible_text = stripped
+                
+                # Build usage info
+                usage = {
+                    "prompt_tokens": result.get("prompt_eval_count", 0),
+                    "completion_tokens": result.get("eval_count", 0),
+                    "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
+                    "total_duration_ms": result.get("total_duration", 0) // 1_000_000,
+                }
+                
+                return {
+                    "text": visible_text,
+                    "reasoning_text": reasoning_text or None,
+                    "usage": usage,
+                    "raw": result,
+                    "process_tokens": None,
+                    "flags": {
+                        "leak_think": _THINK_OPEN in visible_text,
+                        "has_reasoning": bool(reasoning_text),
+                    }
+                }
+            
+            except requests.exceptions.Timeout:
+                elapsed = time.time() - t0
+                logger.error(f"Non-streaming request timed out after {elapsed:.1f}s (limit: {self.timeout}s)")
+                raise TimeoutError(f"Ollama request timed out after {elapsed:.1f}s")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Non-streaming request failed: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        logger.error(f"Ollama error details: {error_detail}")
+                    except:
+                        logger.error(f"Ollama response text: {e.response.text[:500]}")
+                raise RuntimeError(f"Ollama request failed: {e}")
+        
+        # Streaming path (original implementation)
         logger.debug(f"Streaming from {self.base_url}/api/chat")
         logger.debug(f"Model: {model_to_use}, Messages: {len(messages)}, Think: {think_mode}, Phi: {phi_tag_mode}")
         logger.info(f"Request body keys: {list(body.keys())}")

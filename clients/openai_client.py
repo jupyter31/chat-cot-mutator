@@ -17,12 +17,26 @@ class OpenAIClient(BaseLLMClient):
         self, model_name: str, request: Dict[str, Any]
     ) -> ChatResult:
         """Send a chat completion request with retry logic for 429/503."""
-        response = self.client.chat.completions.create(
-            model=model_name,
-            messages=request["messages"],
-            temperature=request.get("temperature", 0.0),
-            seed=request.get("seed"),
-        )
+        # Build kwargs for the API call
+        kwargs = {
+            "model": model_name,
+            "messages": request["messages"],
+            "temperature": request.get("temperature", 0.0),
+        }
+        
+        # Add seed if provided
+        if "seed" in request:
+            kwargs["seed"] = request["seed"]
+        
+        # Handle token limits - support both old and new parameter names
+        # Newer models (o1, gpt-4o, etc.) use max_completion_tokens
+        # Older models use max_tokens
+        if "max_completion_tokens" in request:
+            kwargs["max_completion_tokens"] = request["max_completion_tokens"]
+        elif "max_tokens" in request:
+            kwargs["max_tokens"] = request["max_tokens"]
+        
+        response = self.client.chat.completions.create(**kwargs)
         payload = response.model_dump()
         choices = payload.get("choices") or []
         message = choices[0].get("message") if choices else {}

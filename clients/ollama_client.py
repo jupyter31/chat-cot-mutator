@@ -186,12 +186,14 @@ class OllamaClient(BaseLLMClient):
                 visible_text = msg.get("content", "")
                 reasoning_text = msg.get("thinking", "").strip() if think_mode else ""
                 
-                # Parse <think> tags if present
-                if phi_tag_mode and _THINK_OPEN in visible_text:
+                # ALWAYS extract and remove <think> tags from visible_text
+                # These tags should never appear in the user-facing response
+                if _THINK_OPEN in visible_text:
                     captured, stripped = self._extract_and_strip_think(visible_text)
                     if captured:
                         reasoning_text = (reasoning_text + "\n" + captured).strip() if reasoning_text else captured
                         visible_text = stripped
+                        logger.warning(f"⚠️  <think> tags found in non-streaming response - extracted {len(captured)} chars")
                 
                 # Build usage info
                 usage = {
@@ -201,6 +203,9 @@ class OllamaClient(BaseLLMClient):
                     "total_duration_ms": result.get("total_duration", 0) // 1_000_000,
                 }
                 
+                # Check if <think> tags remain after cleaning (should not happen)
+                leak_think = _THINK_OPEN in visible_text or _THINK_CLOSE in visible_text
+                
                 return {
                     "text": visible_text,
                     "reasoning_text": reasoning_text or None,
@@ -208,7 +213,7 @@ class OllamaClient(BaseLLMClient):
                     "raw": result,
                     "process_tokens": None,
                     "flags": {
-                        "leak_think": _THINK_OPEN in visible_text,
+                        "leak_think": leak_think,
                         "has_reasoning": bool(reasoning_text),
                     }
                 }
@@ -326,13 +331,16 @@ class OllamaClient(BaseLLMClient):
         if reasoning_text:
             logger.debug(f"Thinking preview: {reasoning_text[:200]}...")
         
-        # Post-processing: Extract any remaining <think> tags if not in dedicated modes
-        if not think_mode and not phi_tag_mode and _THINK_OPEN in visible_text:
+        # Post-processing: ALWAYS extract and remove any <think> tags from visible_text
+        # These tags should never appear in the user-facing response
+        if _THINK_OPEN in visible_text:
             captured, stripped = self._extract_and_strip_think(visible_text)
             if captured:
+                # Add captured reasoning to reasoning_text if not already captured during streaming
                 reasoning_text = (reasoning_text + "\n" + captured).strip() if reasoning_text else captured
                 visible_text = stripped
-                logger.debug(f"Post-processed <think> tags: {len(captured)} chars")
+                logger.debug(f"Post-processed <think> tags: {len(captured)} chars extracted, {len(stripped)} chars remaining")
+                logger.warning(f"⚠️  <think> tags found in visible text - extracted {len(captured)} chars to reasoning_text")
         
         # Build usage info from done chunk
         usage = {
@@ -564,12 +572,14 @@ class OllamaClient(BaseLLMClient):
         visible_text = "".join(visible_chunks)
         reasoning_text = "".join(thinking_chunks).strip()
         
-        # Post-processing
-        if not think_mode and not phi_tag_mode and _THINK_OPEN in visible_text:
+        # Post-processing: ALWAYS extract and remove any <think> tags from visible_text
+        # These tags should never appear in the user-facing response
+        if _THINK_OPEN in visible_text:
             captured, stripped = self._extract_and_strip_think(visible_text)
             if captured:
                 reasoning_text = (reasoning_text + "\n" + captured).strip() if reasoning_text else captured
                 visible_text = stripped
+                logger.warning(f"⚠️  <think> tags found in generator stream - extracted {len(captured)} chars")
         
         # Build usage info
         usage = {
@@ -581,6 +591,7 @@ class OllamaClient(BaseLLMClient):
             "elapsed_s": elapsed
         }
         
+        # Check if <think> tags remain after cleaning (should not happen)
         leak_think = (_THINK_OPEN in visible_text) or (_THINK_CLOSE in visible_text)
         
         result = {

@@ -31,6 +31,10 @@ _REASONING_PATTERN = re.compile(
     r"Reasoning:\s*(?P<body>.+?)\s*Final Answer:", re.IGNORECASE | re.DOTALL
 )
 
+# Think tag patterns for reasoning models (e.g., Phi-4, DeepSeek-R1)
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
 _THINK_TAG_PATTERN = re.compile(
     r"<think>\s*(?P<body>.+?)\s*</think>", re.IGNORECASE | re.DOTALL
 )
@@ -445,6 +449,57 @@ def try_use_sample_A(cfg: Any, sample: Any) -> Tuple[Optional[str], bool]:
     return None, False
 
 
+def _extract_and_strip_think_tags(text: str) -> tuple[str, str, bool]:
+    """
+    Extract content within <think> tags and return cleaned text.
+    
+    This function provides centralized cleaning of reasoning model think tags
+    across ALL clients (Ollama, Azure Foundry, OpenAI, Anthropic, Microsoft, etc.).
+    
+    Args:
+        text: Response text that may contain <think>...</think> tags
+        
+    Returns:
+        tuple of (extracted_reasoning, cleaned_text, has_leak)
+        - extracted_reasoning: Content from within <think> tags
+        - cleaned_text: Text with all <think> tags removed
+        - has_leak: True if tags remain after cleaning (shouldn't happen)
+    """
+    reasoning_parts = []
+    cleaned_text = text
+    
+    # Extract all <think>...</think> blocks
+    while _THINK_OPEN in cleaned_text:
+        start_idx = cleaned_text.find(_THINK_OPEN)
+        end_idx = cleaned_text.find(_THINK_CLOSE, start_idx)
+        
+        if end_idx == -1:
+            # Unclosed tag - extract from start to end
+            reasoning = cleaned_text[start_idx + len(_THINK_OPEN):].strip()
+            if reasoning:
+                reasoning_parts.append(reasoning)
+            cleaned_text = cleaned_text[:start_idx]
+            break
+        else:
+            # Extract content between tags
+            reasoning = cleaned_text[start_idx + len(_THINK_OPEN):end_idx].strip()
+            if reasoning:
+                reasoning_parts.append(reasoning)
+            # Remove the entire <think>...</think> block
+            cleaned_text = (
+                cleaned_text[:start_idx] + 
+                cleaned_text[end_idx + len(_THINK_CLOSE):]
+            )
+    
+    extracted_reasoning = "\n\n".join(reasoning_parts) if reasoning_parts else ""
+    cleaned_text = cleaned_text.strip()
+    
+    # Check if any tags remain (shouldn't happen)
+    has_leak = (_THINK_OPEN in cleaned_text) or (_THINK_CLOSE in cleaned_text)
+    
+    return extracted_reasoning, cleaned_text, has_leak
+
+
 def _build_request(
     messages: List[Mapping[str, Any]],
     temperature: float,
@@ -573,6 +628,38 @@ def _execute_condition(
     if not content:
         content = _coerce_message_content(message)
     content = content.strip()
+    
+    # CENTRALIZED CLEANING: Extract and remove <think> tags from ALL clients
+    # This ensures clean separation between reasoning and response across
+    # Ollama, Azure Foundry, OpenAI, Anthropic, Microsoft, and any future clients
+    reasoning_from_tags = ""
+    leak_think_flag = False
+    
+    if _THINK_OPEN in content:
+        reasoning_from_tags, content, leak_think_flag = _extract_and_strip_think_tags(content)
+        
+        if reasoning_from_tags:
+            logger.warning(
+                f"⚠️  <think> tags found in response (condition {condition}) - "
+                f"extracted {len(reasoning_from_tags)} chars to separate field"
+            )
+        
+        if leak_think_flag:
+            logger.error(
+                f"❌ <think> tags still present after cleaning (condition {condition})! "
+                f"This indicates a bug in tag extraction logic."
+            )
+    
+    # Update response flags to reflect tag cleaning
+    response_flags = dict(chat_result.get("flags") or {}) if isinstance(chat_result, Mapping) else {}
+    response_flags["leak_think"] = leak_think_flag
+    
+    # Store extracted reasoning for later use (e.g., trace_A in condition A)
+    # Priority: reasoning_from_tags > chat_result.reasoning_text > None
+    extracted_reasoning = reasoning_from_tags or (
+        chat_result.get("reasoning_text") if isinstance(chat_result, Mapping) else None
+    )
+    
     citations = _extract_citations(content)
     final_answer = _extract_final_answer(content)
     final_answer_text = _strip_citations(final_answer)
@@ -627,8 +714,12 @@ def _execute_condition(
         "latency_s": latency,
         "usage": dict(usage),
         "process_tokens": chat_result.get("process_tokens") if isinstance(chat_result, Mapping) else None,
-        "response_flags": dict(chat_result.get("flags") or {}) if isinstance(chat_result, Mapping) else {},
+        "response_flags": response_flags,  # Use updated flags with leak_think from centralized cleaning
     }
+    
+    # Add extracted reasoning to metadata for condition A (baseline CoT)
+    if extracted_reasoning and condition == "A":
+        base_record["reasoning_text"] = extracted_reasoning
     raw_payload = {
         "request": request,
         "response": raw_response,

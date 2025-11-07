@@ -19,6 +19,9 @@ Usage:
     
     # Using local Ollama
     client = create_llm_client("ollama", base_url="http://localhost:11434", model_id="phi3:medium")
+    
+    # Using Azure Foundry
+    client = create_llm_client("azure_foundry", endpoint="your-endpoint", model_name="DeepSeek-R1-0528")
 """
 
 from typing import Dict, Any
@@ -29,10 +32,11 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
     Factory function to create LLM clients
     
     Args:
-        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "phi", "vllm", "ollama")
+        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "phi", "vllm", "ollama", "azure_foundry")
         **kwargs: Provider-specific configuration
                  For vllm: base_url (default "http://localhost:8000/v1"), api_key (default "EMPTY")
                  For ollama: base_url (default "http://localhost:11434"), model_id (required)
+                 For azure_foundry: endpoint (optional), model_name (optional), credential_scopes (optional)
         
     Returns:
         BaseLLMClient: An instance of the appropriate LLM client
@@ -100,10 +104,20 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Ollama client requires 'requests' package. Install with: pip install requests"
             )
     
+    elif provider == "azure_foundry":
+        try:
+            from .azure_foundry_client import AzureFoundryClient
+            return AzureFoundryClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "Azure Foundry client requires 'azure-ai-inference' and 'azure-identity' packages. "
+                "Install with: pip install azure-ai-inference azure-identity"
+            )
+    
     else:
         raise ValueError(
             f"Unsupported provider: {provider}. "
-            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm, ollama"
+            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm, ollama, azure_foundry"
         )
 
 

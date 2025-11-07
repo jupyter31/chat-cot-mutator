@@ -308,14 +308,32 @@ def judge_answer_correctness(
         msg["content"] = content
     
     # Send request to LLM
-    # Note: Use max_completion_tokens for newer OpenAI models (o1, gpt-4o, etc.)
-    # and max_tokens for older models/other providers
+    # Note: Reasoning models (o1, o3, deepseek-r1) don't support temperature or max_completion_tokens
     request = {
         "model": llm_model,
         "messages": messages,
-        "temperature": 0.0,  # Use deterministic evaluation
-        "max_completion_tokens": 500,  # For newer OpenAI models
     }
+    
+    # Only add temperature and token limits for non-reasoning models
+    # Reasoning models (o1*, o3*, deepseek-r1*, r1-*) handle these internally
+    model_lower = llm_model.lower()
+    is_reasoning_model = any(pattern in model_lower for pattern in [
+        'o1', 'o3', 'deepseek-r1', 'r1-', '-r1', 'reasoning'
+    ])
+    
+    # Debug logging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[ANSWER_JUDGE] Model: {llm_model}, is_reasoning: {is_reasoning_model}")
+    
+    if not is_reasoning_model:
+        request["temperature"] = 0.0  # Use deterministic evaluation
+        request["max_completion_tokens"] = 500  # For newer OpenAI models
+        logger.info(f"[ANSWER_JUDGE] Added temperature=0.0 and max_completion_tokens=500")
+    else:
+        logger.info(f"[ANSWER_JUDGE] Skipped temperature (reasoning model)")
+    
+    logger.info(f"[ANSWER_JUDGE] Request keys: {list(request.keys())}")
     
     try:
         response = llm_client.send_chat_request(llm_model, request)

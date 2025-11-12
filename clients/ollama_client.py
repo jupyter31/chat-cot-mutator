@@ -74,7 +74,8 @@ class OllamaClient(BaseLLMClient):
         self,
         base_url: str = "http://localhost:11434",
         model_id: str = "phi3:medium",
-        timeout_s: int = 300  # Longer default for reasoning models
+        timeout_s: int = 300,  # Longer default for reasoning models
+        num_predict: Optional[int] = None  # Token limit for output
     ):
         """
         Initialize Ollama client.
@@ -83,10 +84,12 @@ class OllamaClient(BaseLLMClient):
             base_url: Ollama server URL (default: http://localhost:11434)
             model_id: Model identifier in Ollama (e.g., "deepseek-r1:8b", "phi4-reasoning:latest")
             timeout_s: Request timeout in seconds (default: 300 for reasoning models)
+            num_predict: Maximum number of tokens to generate (limits output length)
         """
         self.base_url = base_url.rstrip("/")
         self.model_id = model_id
         self.timeout = timeout_s
+        self.num_predict = num_predict
         
         logger.info(f"Initialized OllamaClient: {self.base_url}, model={self.model_id}, timeout={timeout_s}s")
     
@@ -127,7 +130,7 @@ class OllamaClient(BaseLLMClient):
         extra_options = request.get("options", {})
         keep_alive = request.get("keep_alive")
         seed = request.get("seed")  # Extract seed if provided
-        use_streaming = request.get("stream", True)  # Default to True for backward compatibility
+        use_streaming = request.get("stream", False)  # Default to False for better reasoning capture
         
         # Use provided model_name or fall back to instance default
         model_to_use = model_name or self.model_id
@@ -155,6 +158,9 @@ class OllamaClient(BaseLLMClient):
         # Add max_tokens if specified (Ollama uses num_predict)
         if max_tokens:
             body["options"]["num_predict"] = max_tokens
+        # Or use instance-level num_predict if set and max_tokens not provided
+        elif self.num_predict is not None:
+            body["options"]["num_predict"] = self.num_predict
         
         # DeepSeek R1: Enable thinking mode for CoT capture
         if think_mode:

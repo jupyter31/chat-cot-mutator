@@ -142,10 +142,11 @@ def _create_model_client(model_spec: str, config: Optional[Dict[str, Any]] = Non
     if ":" in model_spec:
         provider, model_name = model_spec.split(":", 1)
 
-    # Get timeout from config if available (especially important for reasoning models)
+    # Get timeout and num_predict from config if available
     timeout_s = 300  # Default for reasoning models
     if config:
         timeout_s = int(config.get("timeout_s", 300))
+        # Pass entire config dict so client_factory can access num_predict
 
     client = None
     try:
@@ -160,15 +161,17 @@ def _create_model_client(model_spec: str, config: Optional[Dict[str, Any]] = Non
     if client is None:
         from clients.client_factory import create_llm_client
 
-        # Special handling for ollama - pass model_id and timeout
+        # Special handling for ollama - pass model_id, timeout, and num_predict
         if provider == "ollama":
+            num_predict = config.get("num_predict") if config else None
             client = create_llm_client(
                 "ollama",
                 base_url="http://localhost:11434",
                 model_id=model_name,
-                timeout_s=timeout_s
+                timeout_s=timeout_s,
+                num_predict=num_predict
             )
-            logger.info(f"Created Ollama client with timeout={timeout_s}s")
+            logger.info(f"Created Ollama client with timeout={timeout_s}s, num_predict={num_predict}")
         # Special handling for vLLM - use default or custom URL
         elif provider == "vllm":
             client = create_llm_client(
@@ -427,6 +430,13 @@ def run_sample(
     model_name = cfg.resolved_model_name
     directive = mutation_override if mutation_override is not None else sample.mutation_directive
 
+    # Early exit: Check if all conditions for this sample are already completed
+    if completed_keys is not None:
+        remaining_conditions = [c for c in cfg.conditions if (sample.id, c) not in completed_keys]
+        if not remaining_conditions:
+            logger.info(f"  ⊙ All conditions already completed for sample {sample.id}, skipping...")
+            return []  # Nothing to do for this sample
+
     baseline_cot: Optional[str] = None
     source: Optional[str] = None
     a_result: Optional[Dict[str, Any]] = None
@@ -448,22 +458,27 @@ def run_sample(
     judge_client, judge_model = _resolve_judge_clients(cfg, model_client)
 
     if a_result is None or "record" not in a_result:
-        a_result = generate_trace_A(
-            sample,
-            model_client,
-            prompts,
-            model_name=model_name,
-            temperature=cfg.temperature,
-            seed=cfg.seed_value,
-            judge_client=judge_client,
-            judge_model=judge_model,
-            grounding_threshold=cfg.grounding_threshold,
-            use_streaming=cfg.use_streaming,
-        )
-        baseline_cot = a_result.get("trace_A") or ""
-        source = "generated"
-        a_result = _normalize_a_result(a_result)
-        _save_to_cache(cfg, model_name, sample.id, a_result)
+        try:
+            a_result = generate_trace_A(
+                sample,
+                model_client,
+                prompts,
+                model_name=model_name,
+                temperature=cfg.temperature,
+                seed=cfg.seed_value,
+                judge_client=judge_client,
+                judge_model=judge_model,
+                grounding_threshold=cfg.grounding_threshold,
+                use_streaming=cfg.use_streaming,
+            )
+            baseline_cot = a_result.get("trace_A") or ""
+            source = "generated"
+            a_result = _normalize_a_result(a_result)
+            _save_to_cache(cfg, model_name, sample.id, a_result)
+        except (TimeoutError, Exception) as e:
+            logger.error(f"  ✗ Failed to generate baseline CoT (condition A) for sample {sample.id}: {e}")
+            logger.error(f"     Skipping all conditions for this sample and continuing...")
+            return []  # Return empty results list, skipping this entire sample
     else:
         if baseline_cot is None:
             baseline_cot = a_result.get("trace_A") or ""
@@ -501,25 +516,30 @@ def run_sample(
             record["response_flags"] = merged_flags
             results.append(record)
         elif condition == "B":
-            record = run_condition(
-                sample,
-                "B",
-                model_client,
-                replay_client,
-                prompts,
-                model_name=model_name,
-                temperature=cfg.temperature,
-                seed=cfg.seed_value,
-                judge_client=judge_client,
-                judge_model=judge_model,
-                baseline_cot=None,
-                baseline_cot_used=source,
-                mutation_type="answer_only",
-                directive=directive,
-                grounding_threshold=cfg.grounding_threshold,
-                use_streaming=cfg.use_streaming,
-            )
-            results.append(record)
+            try:
+                record = run_condition(
+                    sample,
+                    "B",
+                    model_client,
+                    replay_client,
+                    prompts,
+                    model_name=model_name,
+                    temperature=cfg.temperature,
+                    seed=cfg.seed_value,
+                    judge_client=judge_client,
+                    judge_model=judge_model,
+                    baseline_cot=None,
+                    baseline_cot_used=source,
+                    mutation_type="answer_only",
+                    directive=directive,
+                    grounding_threshold=cfg.grounding_threshold,
+                    use_streaming=cfg.use_streaming,
+                )
+                results.append(record)
+            except (TimeoutError, Exception) as e:
+                logger.error(f"  ✗ Condition B failed for sample {sample.id}: {e}")
+                logger.error(f"     Skipping condition B for this sample and continuing...")
+                continue
         elif condition in {"C", "D", "C_prime", "D_prime"}:
             if mutated_bundle is None:
                 # Use mutation client if specified, otherwise use main model client
@@ -556,26 +576,31 @@ def run_sample(
                     continue
             
             mutated_cot, meta, spec = mutated_bundle
-            record = run_condition(
-                sample,
-                condition,
-                model_client,
-                replay_client,
-                prompts,
-                model_name=model_name,
-                temperature=cfg.temperature,
-                seed=cfg.seed_value,
-                judge_client=judge_client,
-                judge_model=judge_model,
-                baseline_cot=mutated_cot,
-                baseline_cot_used=source,
-                mutation_meta=(meta, spec),
-                mutation_type=_infer_mutation_type(directive),
-                directive=directive,
-                grounding_threshold=cfg.grounding_threshold,
-                use_streaming=cfg.use_streaming,
-            )
-            results.append(record)
+            try:
+                record = run_condition(
+                    sample,
+                    condition,
+                    model_client,
+                    replay_client,
+                    prompts,
+                    model_name=model_name,
+                    temperature=cfg.temperature,
+                    seed=cfg.seed_value,
+                    judge_client=judge_client,
+                    judge_model=judge_model,
+                    baseline_cot=mutated_cot,
+                    baseline_cot_used=source,
+                    mutation_meta=(meta, spec),
+                    mutation_type=_infer_mutation_type(directive),
+                    directive=directive,
+                    grounding_threshold=cfg.grounding_threshold,
+                    use_streaming=cfg.use_streaming,
+                )
+                results.append(record)
+            except (TimeoutError, Exception) as e:
+                logger.error(f"  ✗ Condition {condition} failed for sample {sample.id}: {e}")
+                logger.error(f"     Skipping condition {condition} for this sample and continuing...")
+                continue
         else:
             raise ValueError(f"Unsupported condition: {condition}")
 

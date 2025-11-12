@@ -1,0 +1,14 @@
+input: data/samples/pilot.jsonl
+output_dir: results/exp_pilot
+model: microsoft_internal:dev-gpt-4o-gg
+temperature: 0.2
+seed: 7
+conditions: ["A", "B", "C", "D"]
+judge: "llm"  # "prog" for programmatic, "llm" for LLM-based two-stage judge
+judge_model: "microsoft_internal:dev-gpt-4o-gg"
+mutation_policy: "pivotal"
+max_samples: 0
+baseline_cot_source: generate
+reuse_cached_A_cots: false
+cot_cache_dir: null
+grounding_threshold: 0.95

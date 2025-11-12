@@ -1,0 +1,48 @@
+# Example configurations for different mutation policies
+
+# Use the original mutation_directive from each sample (default)
+input: data/samples/pilot.jsonl
+output_dir: results/exp_mutation_examples
+model: microsoft_internal:dev-gpt-4o-gg
+temperature: 0.2
+seed: 7
+conditions: ["A", "B", "C", "D"]
+judge: "llm"
+judge_model: "microsoft_internal:dev-gpt-4o-gg"
+
+# MUTATION POLICY OPTIONS:
+
+# 1. Use sample-specific mutations (default)
+mutation_policy: "EntitySwap"
+
+# 2. Use only safe control mutations (alternating)
+# mutation_policy: "control"  # Paraphrase() and Reorder()
+
+# 3. No mutations (C and D use original CoT)
+# mutation_policy: "none"
+
+# 4. Single mutation type for all samples
+# mutation_policy: "EntitySwap"     # EntitySwap() for all
+# mutation_policy: "SalienceDrop"   # SalienceDrop() for all
+# mutation_policy: "TopicDilution"  # TopicDilution() for all
+# mutation_policy: "Paraphrase"     # Paraphrase() for all
+
+# 5. Custom list of mutations (cycles through)
+# mutation_policy: "custom"
+# custom_mutations:
+#   - "EntitySwap(old=Rembrandt->new=Vermeer)"
+#   - "SalienceDrop()"
+#   - "TopicDilution()"
+#   - "Paraphrase()"
+
+# 6. Random selection from custom list (uses seed for determinism)
+# mutation_policy: "random"
+# custom_mutations:
+#   - "EntitySwap(old=Shakespeare->new=Marlowe)"
+#   - "SalienceDrop()"
+#   - "Claim-AlignedDeletion()"
+
+max_samples: 0
+baseline_cot_source: generate
+reuse_cached_A_cots: true
+cot_cache_dir: results/${RUN}/cot_cache

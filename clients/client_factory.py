@@ -13,6 +13,15 @@ Usage:
     
     # Using internal Microsoft API (if available)
     client = create_llm_client("microsoft", endpoint="your-endpoint")
+    
+    # Using local vLLM server
+    client = create_llm_client("vllm", base_url="http://localhost:8000/v1")
+    
+    # Using local Ollama
+    client = create_llm_client("ollama", base_url="http://localhost:11434", model_id="phi3:medium")
+    
+    # Using Azure Foundry
+    client = create_llm_client("azure_foundry", endpoint="your-endpoint", model_name="DeepSeek-R1-0528")
 """
 
 from typing import Dict, Any
@@ -23,8 +32,11 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
     Factory function to create LLM clients
     
     Args:
-        provider: The LLM provider ("openai", "anthropic", "microsoft")
+        provider: The LLM provider ("openai", "anthropic", "microsoft", "huggingface", "phi", "vllm", "ollama", "azure_foundry")
         **kwargs: Provider-specific configuration
+                 For vllm: base_url (default "http://localhost:8000/v1"), api_key (default "EMPTY")
+                 For ollama: base_url (default "http://localhost:11434"), model_id (required)
+                 For azure_foundry: endpoint (optional), model_name (optional), credential_scopes (optional)
         
     Returns:
         BaseLLMClient: An instance of the appropriate LLM client
@@ -52,40 +64,60 @@ def create_llm_client(provider: str, **kwargs) -> BaseLLMClient:
                 "Anthropic client requires 'anthropic' package. Install with: pip install anthropic"
             )
     
-    elif provider == "huggingface" or provider == "phi":
+    elif provider == "huggingface":
         try:
-            from .huggingface_client import HuggingFaceClient, Phi2Client, Phi3Client
+            from .huggingface_client import HuggingFaceClient
             
-            # Handle specific Phi model requests
-            if provider == "phi":
-                model_name = kwargs.get("model_name", "phi-2")
-                if "phi-2" in model_name.lower():
-                    return Phi2Client(**{k: v for k, v in kwargs.items() if k != "model_name"})
-                elif "phi-3" in model_name.lower():
-                    model_size = kwargs.get("model_size", "mini")
-                    return Phi3Client(model_size=model_size, **{k: v for k, v in kwargs.items() if k not in ["model_name", "model_size"]})
-                else:
-                    return HuggingFaceClient(model_name=model_name, **{k: v for k, v in kwargs.items() if k != "model_name"})
-            else:
-                return HuggingFaceClient(**kwargs)
+            return HuggingFaceClient(**kwargs)
         except ImportError:
             raise ImportError(
                 "Hugging Face client requires 'torch' and 'transformers' packages. Install with: pip install torch transformers"
             )
     
-    elif provider == "microsoft":
+    elif provider == "microsoft" or provider == "microsoft_internal":
         try:
-            from .llm_api import MicrosoftLLMClient
+            from .microsoft_client import MicrosoftLLMClient
+            # Provide default endpoint if not specified
+            if "endpoint" not in kwargs:
+                kwargs["endpoint"] = None
             return MicrosoftLLMClient(**kwargs)
         except ImportError:
             raise ImportError(
                 "Microsoft client requires internal dependencies and authentication"
             )
     
+    elif provider == "vllm":
+        try:
+            from .vllm_client import VLLMClient
+            return VLLMClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "vLLM client requires 'openai' package. Install with: pip install openai"
+            )
+    
+    elif provider == "ollama":
+        try:
+            from .ollama_client import OllamaClient
+            return OllamaClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "Ollama client requires 'requests' package. Install with: pip install requests"
+            )
+    
+    elif provider == "azure_foundry":
+        try:
+            from .azure_foundry_client import AzureFoundryClient
+            return AzureFoundryClient(**kwargs)
+        except ImportError:
+            raise ImportError(
+                "Azure Foundry client requires 'azure-ai-inference' and 'azure-identity' packages. "
+                "Install with: pip install azure-ai-inference azure-identity"
+            )
+    
     else:
         raise ValueError(
             f"Unsupported provider: {provider}. "
-            f"Supported providers: openai, anthropic, microsoft, huggingface, phi"
+            f"Supported providers: openai, anthropic, microsoft, huggingface, phi, vllm, ollama, azure_foundry"
         )
 
 

@@ -1,58 +1,65 @@
+"""Anthropic (Claude) LLM client."""
+from typing import Any, Dict, Iterator
+
 import anthropic
-from typing import List, Dict, Any, Iterator
-from .base_llm_client import BaseLLMClient
-import time
+
+from .base_llm_client import BaseLLMClient, ChatResult, retry_on_error
+
 
 class AnthropicClient(BaseLLMClient):
-    """Anthropic Claude API implementation of LLM client"""
-    
-    def __init__(self, api_key: str = None):
-        """
-        Initialize Anthropic client
-        
-        Args:
-            api_key: Anthropic API key (can also be set via ANTHROPIC_API_KEY env var)
-        """
+    """Client for Anthropic Claude API."""
+
+    def __init__(self, api_key: str):
         self.client = anthropic.Anthropic(api_key=api_key)
-    
-    def send_chat_request(self, model_name: str, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Send a single chat completion request"""
+
+    @retry_on_error(max_retries=3, initial_wait=30.0)
+    def send_chat_request(
+        self, model_name: str, request: Dict[str, Any]
+    ) -> ChatResult:
+        """Send a chat completion request with retry logic for 429/503."""
         # Convert OpenAI-style request to Anthropic format
-        messages = request.get("messages", [])
-        system_message = None
+        messages = request["messages"]
+        system_message = ""
+        user_messages = []
         
-        # Extract system message if present
-        if messages and messages[0].get("role") == "system":
-            system_message = messages[0]["content"]
-            messages = messages[1:]
+        for msg in messages:
+            if msg["role"] == "system":
+                system_message = msg["content"]
+            else:
+                user_messages.append(msg)
         
-        anthropic_request = {
-            "model": model_name,
-            "messages": messages,
-            "max_tokens": request.get("max_tokens", 1000),
-        }
+        response = self.client.messages.create(
+            model=model_name,
+            max_tokens=request.get("max_tokens", 4096),
+            temperature=request.get("temperature", 0.0),
+            system=system_message,
+            messages=user_messages,
+        )
         
-        if system_message:
-            anthropic_request["system"] = system_message
-        
-        if "temperature" in request:
-            anthropic_request["temperature"] = request["temperature"]
-        
-        response = self.client.messages.create(**anthropic_request)
-        
-        # Convert to OpenAI-style response format
-        return {
-            "choices": [{
-                "message": {
-                    "content": response.content[0].text,
-                    "role": "assistant"
+        content = response.content[0].text if response.content else ""
+        raw_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": content,
+                    },
+                    "finish_reason": response.stop_reason,
                 }
-            }],
+            ],
             "usage": {
                 "prompt_tokens": response.usage.input_tokens,
                 "completion_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.input_tokens + response.usage.output_tokens
-            }
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+            },
+        }
+        return {
+            "text": content.strip(),
+            "usage": raw_payload["usage"],
+            "raw": raw_payload,
+            "reasoning_text": None,
+            "process_tokens": None,
+            "flags": {"leak_think": False},
         }
     
     def send_batch_chat_request(self, model_name: str, batch_requests: List[Dict[str, Any]], batch_size: int = 5) -> List[str]:
@@ -132,3 +139,6 @@ class AnthropicClient(BaseLLMClient):
         }
         
         yield final_response
+
+
+__all__ = ["AnthropicClient"]

@@ -72,6 +72,13 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     aad_c = condition_metrics.get("C", {}).get("aad", 0.0)
     aad_d = condition_metrics.get("D", {}).get("aad", 0.0)
 
+    # Identify samples where condition A had the correct answer
+    correct_a_sample_ids = {
+        r["sample_id"]
+        for r in results
+        if r["condition"] == "A" and r.get("judge", {}).get("answer_correct") is True
+    }
+
     baseline_answers = {
         r["sample_id"]: _norm(r["final_answer"]) for r in results if r["condition"] == "A"
     }
@@ -116,9 +123,19 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         for r in results
     ]
 
+    # Calculate ACE only for samples where condition A was correct
+    filtered_a = [r for r in results if r["condition"] == "A" and r["sample_id"] in correct_a_sample_ids]
+    filtered_c = [r for r in results if r["condition"] == "C" and r["sample_id"] in correct_a_sample_ids]
+    
+    aad_a_filtered = _safe_mean([_aad_from_result(r) for r in filtered_a])
+    aad_c_filtered = _safe_mean([_aad_from_result(r) for r in filtered_c])
+    
+    ace_filtered = aad_a_filtered - aad_c_filtered if filtered_a and filtered_c else None
+
     return {
         "conditions": condition_metrics,
-        "ACE": aad_a - aad_c,
+        "ACE": ace_filtered,  # Now filtered to only samples where A was correct
+        "ACE_sample_count": len(correct_a_sample_ids),  # Track how many samples were used
         "Delta_CoT_to_AnsOnly": aad_a - aad_b,
         "Resistance": aad_d - aad_c,
         "UpdateRate": update_rate,

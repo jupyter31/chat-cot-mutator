@@ -346,8 +346,99 @@ def build_hotpot_samples(split: str = "validation") -> Iterable[SampleRecord]:
             LOGGER.info(f"  Processed {samples_count} HotpotQA samples...")
         
         yield sample
-    
+
     LOGGER.info(f"Extracted {samples_count} HotpotQA samples (skipped {skipped_count})")
+
+
+def _parse_gsm8k_answer(raw_answer: str) -> str:
+    """
+    GSM8K answers look like:
+    '... reasoning ... #### 42'
+    Return the final answer string after '####'.
+    """
+    import re
+
+    if not raw_answer:
+        return ""
+    text = raw_answer.strip()
+    # Try to split on the '####' marker
+    m = re.search(r"####\s*(.+)", text)
+    if m:
+        return m.group(1).strip()
+    # Fallback: last token if format is slightly off
+    parts = text.split()
+    return parts[-1].strip() if parts else ""
+
+
+def build_gsm8k_samples(split: str = "train") -> Iterable[SampleRecord]:
+    """
+    Yield SampleRecord instances converted from GSM8K (openai/gsm8k, 'main' config).
+    For each problem, we treat the question itself as the 'evidence' passage.
+    """
+    try:
+        dataset = load_dataset("openai/gsm8k", "main", split=split)
+        LOGGER.info(f"Successfully loaded GSM8K dataset ({len(dataset)} rows)")
+    except Exception as e:
+        LOGGER.error(f"Could not load GSM8K dataset: {e}")
+        return
+
+    samples_count = 0
+    skipped_count = 0
+
+    for idx, row in enumerate(dataset):
+        question = (row.get("question") or "").strip()
+        raw_answer = (row.get("answer") or "").strip()
+        if not question or not raw_answer:
+            skipped_count += 1
+            continue
+
+        # Parse final answer from '... #### 42'
+        answer_gold = _parse_gsm8k_answer(raw_answer)
+        if not answer_gold:
+            skipped_count += 1
+            continue
+
+        sample_id = row.get("id") or f"{idx:06d}"
+        if not str(sample_id).startswith("gsm8k-"):
+            sample_id = f"gsm8k-{sample_id}"
+
+        # Treat the problem text as a single evidence passage
+        passages = [
+            FrozenPassageRecord(
+                doc_id=f"gsm8k:{sample_id}",
+                cite="Problem",
+                text=question,
+            )
+        ]
+
+        # No real tools here; keep this empty for now
+        tool_outputs: List[FrozenToolRecord] = []
+
+        context = FrozenContextRecord(
+            passages=passages,
+            tool_outputs=tool_outputs,
+        )
+
+        sample = SampleRecord(
+            id=sample_id,
+            query=question,
+            frozen_context=context,
+            cot_baseline=None,
+            mutation_directive=None,  # assigned later by _assign_mutations_to_samples
+            grounding_rule="Use only the problem statement and your internal reasoning.",
+            answer_gold=answer_gold,
+            meta={
+                "dataset": "gsm8k",
+                "simulated_tools": False,
+            },
+        )
+
+        samples_count += 1
+        if samples_count % 1000 == 0:
+            LOGGER.info(f" Processed {samples_count} GSM8K samples...")
+        yield sample
+
+    LOGGER.info(f"Extracted {samples_count} GSM8K samples (skipped {skipped_count})")
 
 
 def _assign_mutations_to_samples(records: List[SampleRecord]) -> None:
@@ -403,7 +494,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "dataset",
-        choices=["webgpt", "hotpot", "all"],
+        choices=["webgpt", "hotpot", "gsm8k", "all"],
         help="Dataset to convert",
     )
     parser.add_argument(
@@ -474,6 +565,17 @@ def main() -> None:
         LOGGER.info(f"Building HotpotQA samples from split '{split}'...")
         build_dataset_file(
             build_hotpot_samples(split=split),
+            output_path,
+            limit=limit,
+            seed=seed,
+        )
+
+    if args.dataset in {"gsm8k", "all"}:
+        split = args.split or "train"  # gsm8k has train/test; we usually use train
+        output_path = output_dir / f"gsm8k_{suffix}.jsonl"
+        LOGGER.info(f"Building GSM8K samples from split '{split}'...")
+        build_dataset_file(
+            build_gsm8k_samples(split=split),
             output_path,
             limit=limit,
             seed=seed,

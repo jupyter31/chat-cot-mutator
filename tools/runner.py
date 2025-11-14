@@ -179,6 +179,14 @@ def _create_model_client(model_spec: str, config: Optional[Dict[str, Any]] = Non
                 base_url="http://localhost:8000/v1",  # vLLM default
                 api_key="EMPTY"
             )
+        # Special handling for azure_foundry - pass timeout
+        elif provider == "azure_foundry":
+            client = create_llm_client(
+                "azure_foundry",
+                endpoint=None,
+                timeout_s=timeout_s
+            )
+            logger.info(f"Created Azure Foundry client with timeout={timeout_s}s")
         else:
             client = create_llm_client(provider, endpoint=None)
     return client, model_name

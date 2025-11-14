@@ -1,8 +1,11 @@
 """Azure Foundry LLM client using Azure AI Inference SDK."""
 from typing import Any, Dict, Optional
 import os
+import logging
 
 from .base_llm_client import BaseLLMClient, ChatResult, retry_on_error
+
+logger = logging.getLogger(__name__)
 
 
 class AzureFoundryClient(BaseLLMClient):
@@ -13,6 +16,7 @@ class AzureFoundryClient(BaseLLMClient):
         endpoint: Optional[str] = None,
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
+        timeout_s: int = 300,
     ):
         """
         Initialize Azure Foundry client.
@@ -24,6 +28,7 @@ class AzureFoundryClient(BaseLLMClient):
                        Defaults to DEPLOYMENT_NAME env var
             api_key: Azure API key for authentication
                     Defaults to AZURE_API_KEY env var
+            timeout_s: Request timeout in seconds (default: 300)
         """
         try:
             from azure.ai.inference import ChatCompletionsClient
@@ -39,6 +44,7 @@ class AzureFoundryClient(BaseLLMClient):
             "https://model-ft-test.services.ai.azure.com/models"
         )
         self.default_model_name = model_name or os.getenv("DEPLOYMENT_NAME", "DeepSeek-R1-0528")
+        self.timeout_s = timeout_s
         
         # Get API key from parameter or environment
         key = api_key or os.getenv("AZURE_API_KEY")
@@ -52,6 +58,8 @@ class AzureFoundryClient(BaseLLMClient):
             endpoint=self.endpoint,
             credential=AzureKeyCredential(key)
         )
+        
+        logger.info(f"Initialized AzureFoundryClient with timeout={timeout_s}s, endpoint={self.endpoint}, model={self.default_model_name}")
 
     @retry_on_error(max_retries=3, initial_wait=30.0)
     def send_chat_request(
@@ -96,8 +104,9 @@ class AzureFoundryClient(BaseLLMClient):
         if "seed" in request:
             kwargs["seed"] = request["seed"]
         
-        # Send request
-        response = self.client.complete(**kwargs)
+        # Send request with timeout (pass as float seconds)
+        logger.debug(f"Sending Azure Foundry request with timeout={self.timeout_s}s")
+        response = self.client.complete(**kwargs, timeout=float(self.timeout_s))
         
         # Extract response content
         choices = response.choices if hasattr(response, 'choices') else []

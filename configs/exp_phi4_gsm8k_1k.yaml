@@ -1,0 +1,14 @@
+input: data/gsm8k_1k.jsonl
+output_dir: results/exp_phi4_gsm8k_1k
+model: ollama:phi4-reasoning:latest
+temperature: 0.2
+seed: 7
+conditions: ["A", "B", "C", "D"]
+judge: "llm"
+judge_model: "microsoft_internal:dev-gpt-4o-gg"
+mutation_policy: "pivotal"
+max_samples: 0
+baseline_cot_source: generate
+reuse_cached_A_cots: false
+cot_cache_dir: null
+grounding_threshold: 0.95

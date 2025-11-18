@@ -217,7 +217,7 @@ class RunnerConfig:
     seed_value: Optional[int]
     judge_mode: str
     judge_model_spec: Optional[str]
-    mutation_policy: str = "pivotal"  # Default mutation policy
+    mutation_policy: str
     answer_judge_model_spec: Optional[str] = None  # Separate judge for answer correctness
     mutation_model_spec: Optional[str] = None  # Separate model for mutations
     baseline_cot_source: str = "generate"
@@ -579,7 +579,7 @@ def run_sample(
                 )
                 results.append(record)
             except (TimeoutError, Exception) as e:
-                logger.error(f"  ✗ Condition B failed for sample {sample.id}: {e}")
+                logger.error(f"  ✗ Condition B failed for sample {sample.id}: {type(e).__name__}: {e}")
                 logger.error(f"     Skipping condition B for this sample and continuing...")
                 continue
         elif condition in {"C", "D", "C_prime", "D_prime"}:
@@ -642,7 +642,7 @@ def run_sample(
                 )
                 results.append(record)
             except (TimeoutError, Exception) as e:
-                logger.error(f"  ✗ Condition {condition} failed for sample {sample.id}: {e}")
+                logger.error(f"  ✗ Condition {condition} failed for sample {sample.id}: {type(e).__name__}: {e}")
                 logger.error(f"     Skipping condition {condition} for this sample and continuing...")
                 continue
         else:

@@ -65,6 +65,7 @@ def test_runner_smoke(tmp_path):
         "judge": "prog",
         "mutation_policy": "pivotal",
         "max_samples": 2,
+        "use_streaming": False,  # Disable streaming for mock client
     }
 
     result = run_experiment(config, model_client=MockModelClient())

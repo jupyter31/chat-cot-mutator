@@ -217,7 +217,7 @@ class RunnerConfig:
     seed_value: Optional[int]
     judge_mode: str
     judge_model_spec: Optional[str]
-    mutation_policy: str
+    mutation_policy: str = "pivotal"  # Default mutation policy
     answer_judge_model_spec: Optional[str] = None  # Separate judge for answer correctness
     mutation_model_spec: Optional[str] = None  # Separate model for mutations
     baseline_cot_source: str = "generate"

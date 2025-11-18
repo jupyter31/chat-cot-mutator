@@ -27,3 +27,5 @@ include = ["clients*", "core*", "eval*", "mutations*", "datasets*", "tools*", "a
 markers = [
     "integration: marks tests as integration tests that require external services or credentials (deselect with '-m \"not integration\"')",
 ]
+# Exclude integration tests from collection to avoid import errors
+python_files = ["test_*.py", "!integration_*.py"]

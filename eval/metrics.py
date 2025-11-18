@@ -22,23 +22,40 @@ def _safe_mean(values: Iterable[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def _aad_from_result(result: Dict[str, Any]) -> float:
+def _aad_from_result(result: Dict[str, Any], aad_mode: str = "combined") -> float:
+    """Calculate AAD score based on the specified mode.
+    
+    Args:
+        result: Result dictionary
+        aad_mode: One of 'combined', 'answer_only', 'grounding_only'
+    """
     judge = result.get("judge", {})
     grounded = bool(judge.get("is_grounded"))
     answer_correct = judge.get("answer_correct")
-    if answer_correct is None:
+    
+    if aad_mode == "answer_only":
+        # AAD based only on answer correctness
+        if answer_correct is None:
+            return 0.0
+        return 1.0 if bool(answer_correct) else 0.0
+    elif aad_mode == "grounding_only":
+        # AAD based only on grounding
         return 1.0 if grounded else 0.0
-    return 1.0 if grounded and bool(answer_correct) else 0.0
+    else:
+        # Combined: both grounded AND answer correct
+        if answer_correct is None:
+            return 1.0 if grounded else 0.0
+        return 1.0 if grounded and bool(answer_correct) else 0.0
 
 
-def compute_condition_metrics(results: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def compute_condition_metrics(results: List[Dict[str, Any]], aad_mode: str = "combined") -> Dict[str, Dict[str, Any]]:
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for result in results:
         grouped[result["condition"]].append(result)
 
     metrics: Dict[str, Dict[str, Any]] = {}
     for condition, bucket in grouped.items():
-        aad_scores = [_aad_from_result(r) for r in bucket]
+        aad_scores = [_aad_from_result(r, aad_mode=aad_mode) for r in bucket]
         
         # Use continuous grounding scores instead of binary threshold
         grounding_scores = [
@@ -65,8 +82,8 @@ def compute_condition_metrics(results: List[Dict[str, Any]]) -> Dict[str, Dict[s
     return metrics
 
 
-def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    condition_metrics = compute_condition_metrics(results)
+def compute_overall_metrics(results: List[Dict[str, Any]], aad_mode: str = "combined") -> Dict[str, Any]:
+    condition_metrics = compute_condition_metrics(results, aad_mode=aad_mode)
     aad_a = condition_metrics.get("A", {}).get("aad", 0.0)
     aad_b = condition_metrics.get("B", {}).get("aad", 0.0)
     aad_c = condition_metrics.get("C", {}).get("aad", 0.0)
@@ -127,8 +144,8 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     filtered_a = [r for r in results if r["condition"] == "A" and r["sample_id"] in correct_a_sample_ids]
     filtered_c = [r for r in results if r["condition"] == "C" and r["sample_id"] in correct_a_sample_ids]
     
-    aad_a_filtered = _safe_mean([_aad_from_result(r) for r in filtered_a])
-    aad_c_filtered = _safe_mean([_aad_from_result(r) for r in filtered_c])
+    aad_a_filtered = _safe_mean([_aad_from_result(r, aad_mode=aad_mode) for r in filtered_a])
+    aad_c_filtered = _safe_mean([_aad_from_result(r, aad_mode=aad_mode) for r in filtered_c])
     
     ace_filtered = aad_a_filtered - aad_c_filtered if filtered_a and filtered_c else None
 
@@ -145,7 +162,7 @@ def compute_overall_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def compute_metrics_by_mutation(results: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def compute_metrics_by_mutation(results: List[Dict[str, Any]], aad_mode: str = "combined") -> Dict[str, Dict[str, Any]]:
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for result in results:
         grouped[result.get("mutation_type", "unknown")].append(result)
@@ -160,7 +177,7 @@ def compute_metrics_by_mutation(results: List[Dict[str, Any]]) -> Dict[str, Dict
         
         summary[mutation_type] = {
             "count": len(bucket),
-            "aad": _safe_mean(_aad_from_result(r) for r in bucket),
+            "aad": _safe_mean(_aad_from_result(r, aad_mode=aad_mode) for r in bucket),
             "grounding_score": _safe_mean(grounding_scores),  # NEW: continuous score
             "grounded_rate": _safe_mean(grounded_binary),      # OLD: binary rate
         }

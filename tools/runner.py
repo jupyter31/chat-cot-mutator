@@ -46,11 +46,24 @@ logger = logging.getLogger(__name__)
 PROMPT_CONDITIONS = ["A", "B", "C", "D"]
 
 
-def _load_prompts(root: Path) -> PromptTemplates:
+def _load_prompts(root: Path, config: Optional[Dict[str, Any]] = None) -> PromptTemplates:
     templates: Dict[str, str] = {}
     prompts_dir = root / "prompts"
+    
+    # Check if config specifies custom prompt files for conditions
+    custom_prompts = {}
+    if config:
+        for condition in PROMPT_CONDITIONS:
+            key = f"condition_{condition}_prompt"
+            if key in config:
+                custom_prompts[condition] = config[key]
+    
     for condition in PROMPT_CONDITIONS:
-        prompt_path = prompts_dir / "conditions" / f"{condition}.txt"
+        # Use custom prompt file if specified, otherwise use default
+        prompt_file = custom_prompts.get(condition, f"{condition}.txt")
+        prompt_path = prompts_dir / "conditions" / prompt_file
+        if not prompt_path.exists():
+            raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
         templates[condition] = prompt_path.read_text(encoding="utf-8")
 
     settings: Dict[str, Any] = {}
@@ -161,17 +174,18 @@ def _create_model_client(model_spec: str, config: Optional[Dict[str, Any]] = Non
     if client is None:
         from clients.client_factory import create_llm_client
 
-        # Special handling for ollama - pass model_id, timeout, and num_predict
+        # Special handling for ollama - pass model_id, timeout, num_predict, and base_url
         if provider == "ollama":
             num_predict = config.get("num_predict") if config else None
+            base_url = config.get("ollama_base_url", "http://localhost:11434") if config else "http://localhost:11434"
             client = create_llm_client(
                 "ollama",
-                base_url="http://localhost:11434",
+                base_url=base_url,
                 model_id=model_name,
                 timeout_s=timeout_s,
                 num_predict=num_predict
             )
-            logger.info(f"Created Ollama client with timeout={timeout_s}s, num_predict={num_predict}")
+            logger.info(f"Created Ollama client with base_url={base_url}, timeout={timeout_s}s, num_predict={num_predict}")
         # Special handling for vLLM - use default or custom URL
         elif provider == "vllm":
             client = create_llm_client(
@@ -203,6 +217,7 @@ class RunnerConfig:
     seed_value: Optional[int]
     judge_mode: str
     judge_model_spec: Optional[str]
+    answer_judge_model_spec: Optional[str] = None  # Separate judge for answer correctness
     mutation_policy: str
     mutation_model_spec: Optional[str] = None  # Separate model for mutations
     baseline_cot_source: str = "generate"
@@ -245,6 +260,20 @@ def _resolve_judge_clients(cfg: RunnerConfig, model_client) -> Tuple[Any, Option
     if cfg.judge_model_spec:
         return _create_model_client(cfg.judge_model_spec)
     return model_client, cfg.resolved_model_name
+
+
+def _resolve_answer_judge_clients(cfg: RunnerConfig, model_client) -> Tuple[Any, Optional[str]]:
+    """Resolve answer judge clients separately from grounding judge.
+    
+    If answer_judge_model_spec is set, use that for answer correctness.
+    Otherwise, fall back to None (will use token-based matching).
+    This allows judge: none with answer_judge_model: some-model to skip
+    grounding but still use LLM for answer matching.
+    """
+    if cfg.answer_judge_model_spec:
+        return _create_model_client(cfg.answer_judge_model_spec)
+    # Don't fall back to main judge - let the pipeline handle fallback
+    return None, None
 
 
 def _cache_file_paths(cfg: RunnerConfig, model_name: str, sample_id: str) -> Tuple[Path, Path]:
@@ -464,6 +493,7 @@ def run_sample(
             a_result = _build_sample_a_result(sample, baseline_cot, prompts)
 
     judge_client, judge_model = _resolve_judge_clients(cfg, model_client)
+    answer_judge_client, answer_judge_model = _resolve_answer_judge_clients(cfg, model_client)
 
     if a_result is None or "record" not in a_result:
         try:
@@ -476,6 +506,8 @@ def run_sample(
                 seed=cfg.seed_value,
                 judge_client=judge_client,
                 judge_model=judge_model,
+                answer_judge_client=answer_judge_client,
+                answer_judge_model=answer_judge_model,
                 grounding_threshold=cfg.grounding_threshold,
                 use_streaming=cfg.use_streaming,
             )
@@ -527,7 +559,7 @@ def run_sample(
             try:
                 record = run_condition(
                     sample,
-                    "B",
+                    condition,
                     model_client,
                     replay_client,
                     prompts,
@@ -536,10 +568,12 @@ def run_sample(
                     seed=cfg.seed_value,
                     judge_client=judge_client,
                     judge_model=judge_model,
+                    answer_judge_client=answer_judge_client,
+                    answer_judge_model=answer_judge_model,
                     baseline_cot=None,
-                    baseline_cot_used=source,
-                    mutation_type="answer_only",
-                    directive=directive,
+                    baseline_cot_used="n/a",
+                    mutation_type="baseline",
+                    directive=sample.mutation_directive,
                     grounding_threshold=cfg.grounding_threshold,
                     use_streaming=cfg.use_streaming,
                 )
@@ -596,6 +630,8 @@ def run_sample(
                     seed=cfg.seed_value,
                     judge_client=judge_client,
                     judge_model=judge_model,
+                    answer_judge_client=answer_judge_client,
+                    answer_judge_model=answer_judge_model,
                     baseline_cot=mutated_cot,
                     baseline_cot_used=source,
                     mutation_meta=(meta, spec),
@@ -627,7 +663,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     
     logger.info("Loading prompt templates...")
     repo_root = Path(__file__).resolve().parent.parent
-    prompts = _load_prompts(repo_root)
+    prompts = _load_prompts(repo_root, config)
     
     # Override prompts with config values if present
     if "evidence_channel" in config:
@@ -676,11 +712,14 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     seed_value = int(seed) if seed is not None else None
     judge_mode = config.get("judge", "prog")
     judge_model_spec = config.get("judge_model")
+    answer_judge_model_spec = config.get("answer_judge_model")  # Separate judge for answer correctness
     mutation_policy = config.get("mutation_policy", "pivotal")
     mutation_model_spec = config.get("mutation_model")  # Separate model for mutations
     logger.info(f"Settings: temperature={temperature}, seed={seed_value}, mutation_policy={mutation_policy}")
     if mutation_model_spec:
         logger.info(f"Mutation model: {mutation_model_spec}")
+    if answer_judge_model_spec:
+        logger.info(f"Answer judge model: {answer_judge_model_spec}")
 
     run_id = _infer_run_id(output_dir)
     baseline_source = _validate_baseline_source(config.get("baseline_cot_source", "generate"))
@@ -698,6 +737,7 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
         seed_value=seed_value,
         judge_mode=judge_mode,
         judge_model_spec=judge_model_spec,
+        answer_judge_model_spec=answer_judge_model_spec,
         mutation_policy=mutation_policy,
         mutation_model_spec=mutation_model_spec,
         baseline_cot_source=baseline_source,

@@ -555,6 +555,8 @@ def _execute_condition(
     baseline_cot: Optional[str] = None,
     judge_client=None,
     judge_model: Optional[str] = None,
+    answer_judge_client=None,
+    answer_judge_model: Optional[str] = None,
     grounding_threshold: float = 0.95,
     use_streaming: bool = True,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -678,14 +680,18 @@ def _execute_condition(
     logger.debug(f"      Grounding result: {judge_result['is_grounded']}")
     
     # Judge answer correctness using LLM-based semantic comparison
+    # Use separate answer judge if configured, otherwise fall back to main judge
+    answer_client = answer_judge_client if answer_judge_model else (judge_client if judge_model else None)
+    answer_model = answer_judge_model or judge_model
+    
     if sample.answer_gold:
-        logger.debug(f"      Judging answer correctness (mode: {'llm_semantic' if judge_model else 'token_subset'})...")
+        logger.debug(f"      Judging answer correctness (mode: {'llm_semantic' if answer_model else 'token_subset'})...")
         correctness_result = judge_answer_correctness(
             predicted_answer=final_answer,
             gold_answer=sample.answer_gold,
             question=sample.query,
-            llm_client=judge_client if judge_model else None,
-            llm_model=judge_model,
+            llm_client=answer_client,
+            llm_model=answer_model,
         )
         judge_result["answer_correct"] = correctness_result.get("is_correct")
         judge_result["answer_correct_explanation"] = correctness_result.get("explanation")
@@ -739,6 +745,8 @@ def generate_trace_A(
     seed: Optional[int] = None,
     judge_client=None,
     judge_model: Optional[str] = None,
+    answer_judge_client=None,
+    answer_judge_model: Optional[str] = None,
     grounding_threshold: float = 0.95,
     use_streaming: bool = True,
 ) -> Dict[str, Any]:
@@ -752,6 +760,8 @@ def generate_trace_A(
         seed=seed,
         judge_client=judge_client,
         judge_model=judge_model,
+        answer_judge_client=answer_judge_client,
+        answer_judge_model=answer_judge_model,
         grounding_threshold=grounding_threshold,
         use_streaming=use_streaming,
     )
@@ -814,6 +824,8 @@ def run_condition(
     seed: Optional[int] = None,
     judge_client=None,
     judge_model: Optional[str] = None,
+    answer_judge_client=None,
+    answer_judge_model: Optional[str] = None,
     baseline_cot: Optional[str] = None,
     baseline_cot_used: Optional[str] = None,
     mutation_meta: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None,
@@ -840,6 +852,8 @@ def run_condition(
         baseline_cot=baseline_cot,
         judge_client=judge_client,
         judge_model=judge_model,
+        answer_judge_client=answer_judge_client,
+        answer_judge_model=answer_judge_model,
         grounding_threshold=grounding_threshold,
         use_streaming=use_streaming,
     )

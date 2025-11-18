@@ -6,8 +6,13 @@ import sys
 from eval.metrics import compute_overall_metrics, compute_metrics_by_mutation, token_latency_rows
 
 
-def recompute_metrics(results_dir: Path):
-    """Recompute metrics with new grounding score calculations."""
+def recompute_metrics(results_dir: Path, aad_mode: str = "combined"):
+    """Recompute metrics with specified AAD mode.
+    
+    Args:
+        results_dir: Path to experiment results directory
+        aad_mode: One of 'combined' (default), 'answer_only', 'grounding_only'
+    """
     samples_file = results_dir / "samples.jsonl"
     if not samples_file.exists():
         print(f"Error: {samples_file} not found")
@@ -22,9 +27,9 @@ def recompute_metrics(results_dir: Path):
     
     print(f"Loaded {len(results)} samples from {samples_file}")
     
-    # Recompute metrics
-    overall = compute_overall_metrics(results)
-    by_mutation = compute_metrics_by_mutation(results)
+    # Recompute metrics with specified AAD mode
+    overall = compute_overall_metrics(results, aad_mode=aad_mode)
+    by_mutation = compute_metrics_by_mutation(results, aad_mode=aad_mode)
     
     # Save updated metrics
     overall_file = results_dir / "metrics_overall.json"
@@ -56,14 +61,23 @@ def recompute_metrics(results_dir: Path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        results_dir = Path(sys.argv[1])
-    else:
-        # Default to the hotpot experiment
-        results_dir = Path("results/exp_ollama_deepseek_8b_cots-hotpot_30")
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Recompute metrics for experiment results")
+    parser.add_argument("results_dir", nargs="?", 
+                       default="results/exp_ollama_deepseek_8b_cots-hotpot_30",
+                       help="Path to experiment results directory")
+    parser.add_argument("--aad-mode", 
+                       choices=["combined", "answer_only", "grounding_only"],
+                       default="answer_only",
+                       help="AAD calculation mode (default: answer_only for GSM8K)")
+    
+    args = parser.parse_args()
+    results_dir = Path(args.results_dir)
     
     if not results_dir.exists():
         print(f"Error: {results_dir} does not exist")
         sys.exit(1)
     
-    recompute_metrics(results_dir)
+    print(f"Recomputing metrics with aad_mode='{args.aad_mode}'...\n")
+    recompute_metrics(results_dir, aad_mode=args.aad_mode)

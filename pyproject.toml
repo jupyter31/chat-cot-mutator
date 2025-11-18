@@ -22,3 +22,8 @@ chat-cot-runner = "tools.runner:main"
 
 [tool.setuptools.packages.find]
 include = ["clients*", "core*", "eval*", "mutations*", "datasets*", "tools*", "app_components*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests that require external services or credentials (deselect with '-m "not integration"')",
+]

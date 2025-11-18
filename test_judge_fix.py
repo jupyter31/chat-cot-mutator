@@ -1,8 +1,10 @@
 """Test that the judge_answer_correctness fix works with max_completion_tokens."""
 import os
+import pytest
 from clients.openai_client import OpenAIClient
 from eval.judges import judge_answer_correctness
 
+@pytest.mark.integration
 def test_judge_with_new_api():
     """Test that judge works with newer OpenAI models using max_completion_tokens."""
     # Get API key from environment

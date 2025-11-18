@@ -1,8 +1,11 @@
 deepdiff==8.5.0
+datasets==2.20.0
+faiss-cpu==1.8.0.post1
 httpx==0.28.1
 msal==1.32.3
 msal[broker]>=1.20,<2
 requests==2.32.4
+sentence-transformers==3.2.0
 streamlit==1.47.0
 PyYAML==6.0.2
 pytest==8.3.4

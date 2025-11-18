@@ -25,5 +25,5 @@ include = ["clients*", "core*", "eval*", "mutations*", "datasets*", "tools*", "a
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: marks tests as integration tests that require external services or credentials (deselect with '-m "not integration"')",
+    "integration: marks tests as integration tests that require external services or credentials (deselect with '-m \"not integration\"')",
 ]

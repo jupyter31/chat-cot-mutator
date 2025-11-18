@@ -217,8 +217,8 @@ class RunnerConfig:
     seed_value: Optional[int]
     judge_mode: str
     judge_model_spec: Optional[str]
-    answer_judge_model_spec: Optional[str] = None  # Separate judge for answer correctness
     mutation_policy: str
+    answer_judge_model_spec: Optional[str] = None  # Separate judge for answer correctness
     mutation_model_spec: Optional[str] = None  # Separate model for mutations
     baseline_cot_source: str = "generate"
     reuse_cached_A_cots: bool = True

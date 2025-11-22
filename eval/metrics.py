@@ -44,7 +44,9 @@ def _aad_from_result(result: Dict[str, Any], aad_mode: str = "combined") -> floa
     else:
         # Combined: both grounded AND answer correct
         if answer_correct is None:
-            return 1.0 if grounded else 0.0
+            # If we can't verify answer correctness, treat as failure
+            # This prevents inflating scores when answer judgment is missing/failed
+            return 0.0
         return 1.0 if grounded and bool(answer_correct) else 0.0
 
 

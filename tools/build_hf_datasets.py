@@ -370,6 +370,21 @@ def _parse_gsm8k_answer(raw_answer: str) -> str:
     return parts[-1].strip() if parts else ""
 
 
+def _normalize_fever_label(label: str) -> str:
+    """Normalize FEVER labels to uppercase."""
+    if not label:
+        return ""
+    label = label.strip().upper()
+    # Map common variations
+    if label in ["SUPPORTS", "SUPPORT"]:
+        return "SUPPORTS"
+    elif label in ["REFUTES", "REFUTE"]:
+        return "REFUTES"
+    elif label in ["NOT ENOUGH INFO", "NOT_ENOUGH_INFO", "NEI"]:
+        return "NOT ENOUGH INFO"
+    return label
+
+
 def build_gsm8k_samples(split: str = "train") -> Iterable[SampleRecord]:
     """
     Yield SampleRecord instances converted from GSM8K (openai/gsm8k, 'main' config).
@@ -441,6 +456,190 @@ def build_gsm8k_samples(split: str = "train") -> Iterable[SampleRecord]:
     LOGGER.info(f"Extracted {samples_count} GSM8K samples (skipped {skipped_count})")
 
 
+def build_fever_samples(
+    split: str = "train",
+    evidence_lookup: Optional[Dict[str, str]] = None,
+    local_file: Optional[Path] = None,
+) -> Iterable[SampleRecord]:
+    """
+    Yield SampleRecord instances converted from FEVER (Fact Extraction and VERification).
+    
+    Args:
+        split: Dataset split to use (only relevant if loading from HuggingFace, not from local file)
+        evidence_lookup: Optional dict mapping sample_id -> retrieved evidence text.
+                        If provided, this evidence will be used instead of empty passages.
+                        This allows integration with external dense retrieval systems.
+        local_file: Path to local FEVER JSONL file. If provided, loads from local file instead of HuggingFace.
+    
+    Returns:
+        Iterator of SampleRecord instances
+    """
+    # Try loading from local file first
+    if local_file and local_file.exists():
+        LOGGER.info(f"Loading FEVER dataset from local file: {local_file}")
+        try:
+            with local_file.open("r", encoding="utf-8") as f:
+                dataset = []
+                for line_num, line in enumerate(f, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        dataset.append(obj)
+                    except json.JSONDecodeError as e:
+                        LOGGER.debug(f"Line {line_num}: Failed to parse JSON: {e}")
+                        continue
+            LOGGER.info(f"Successfully loaded {len(dataset)} FEVER samples from local file")
+        except Exception as e:
+            LOGGER.error(f"Could not load FEVER dataset from local file: {e}")
+            return
+    else:
+        # Fallback to HuggingFace (will likely fail with current datasets)
+        try:
+            # Use the tomhosking/fever-nli dataset which is in standard format
+            # This contains the FEVER claims with labels
+            dataset = load_dataset("tomhosking/fever-nli", split=split)
+            LOGGER.info(f"Successfully loaded FEVER dataset ({len(dataset)} rows)")
+        except Exception as e:
+            LOGGER.error(f"Could not load FEVER dataset: {e}")
+            LOGGER.info("Trying alternative dataset source...")
+            try:
+                # Fallback: try loading from fever shared task format
+                dataset = load_dataset("fever", "v1.0", split=split)
+                LOGGER.info(f"Successfully loaded FEVER dataset from alternative source ({len(dataset)} rows)")
+            except Exception as e2:
+                LOGGER.error(f"All FEVER dataset sources failed: {e2}")
+                return
+
+    samples_count = 0
+    skipped_count = 0
+
+    for idx, row in enumerate(dataset):
+        # Extract fields - handle both dict (local file) and HF dataset formats
+        if isinstance(row, dict):
+            claim = (row.get("claim") or "").strip()
+            label_raw = row.get("label")
+            sample_id = row.get("id")
+        else:
+            claim = (getattr(row, "claim", None) or "").strip()
+            label_raw = getattr(row, "label", None)
+            sample_id = getattr(row, "id", None)
+            
+        if not claim:
+            skipped_count += 1
+            continue
+        
+        # Get label - FEVER uses numeric labels in some versions, string in others
+        label_raw = row.get("label")
+        if isinstance(label_raw, int):
+            # Map numeric to string: 0=SUPPORTS, 1=REFUTES, 2=NOT ENOUGH INFO
+            label_map = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT ENOUGH INFO"}
+            label = label_map.get(label_raw, "")
+        else:
+            label = str(label_raw or "").strip()
+        
+        # Normalize label
+        label = _normalize_fever_label(label)
+        if not label or label not in ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO"]:
+            skipped_count += 1
+            if idx < 5:  # Log first few failures
+                LOGGER.debug(f"Row {idx}: Invalid label '{label_raw}'")
+            continue
+        
+        # Get sample ID - preserve as string for alignment with external retrieval
+        sample_id = row.get("id")
+        if sample_id is None:
+            sample_id = f"{idx:06d}"
+        sample_id = str(sample_id)  # Ensure string type
+        
+        if not sample_id.startswith("fever-"):
+            sample_id = f"fever-{sample_id}"
+        
+        # Handle evidence - either from external lookup or placeholder
+        # Following HotPotQA pattern: evidence appears in both passages AND tool_outputs
+        passages = []
+        tool_outputs = []
+        
+        if evidence_lookup and sample_id in evidence_lookup:
+            # Use externally retrieved evidence
+            evidence_text = evidence_lookup[sample_id]
+            if evidence_text and evidence_text.strip():
+                passages.append(
+                    FrozenPassageRecord(
+                        doc_id=f"fever:{sample_id}",
+                        cite="Retrieved Evidence",
+                        text=evidence_text.strip(),
+                    )
+                )
+                # Add to tool_outputs to simulate dense retrieval tool
+                tool_outputs.append(
+                    FrozenToolRecord(
+                        tool="dense_retrieval",
+                        input=claim,
+                        output=evidence_text.strip(),
+                    )
+                )
+        else:
+            # Placeholder for evidence to be injected later
+            # Add to BOTH passages and tool_outputs (like HotPotQA pattern)
+            placeholder_text = "[Evidence will be retrieved externally based on sample_id]"
+            passages.append(
+                FrozenPassageRecord(
+                    doc_id=f"fever:{sample_id}",
+                    cite="Evidence Placeholder",
+                    text=placeholder_text,
+                )
+            )
+            # Also add placeholder to tool_outputs so agents can access it
+            tool_outputs.append(
+                FrozenToolRecord(
+                    tool="dense_retrieval",
+                    input=claim,
+                    output=placeholder_text,
+                )
+            )
+        
+        context = FrozenContextRecord(
+            passages=passages,
+            tool_outputs=tool_outputs,
+        )
+        
+        # Format the query to include the claim and instructions
+        query = f"""Claim: {claim}
+
+Based on the evidence provided, determine if the claim is:
+- SUPPORTS: The evidence supports the claim
+- REFUTES: The evidence refutes the claim
+- NOT ENOUGH INFO: The evidence does not provide enough information
+
+Answer with only one of: SUPPORTS, REFUTES, or NOT ENOUGH INFO"""
+        
+        sample = SampleRecord(
+            id=sample_id,
+            query=query,
+            frozen_context=context,
+            cot_baseline=None,
+            mutation_directive=None,
+            grounding_rule="Base your answer only on the provided evidence. Do not use external knowledge.",
+            answer_gold=label,
+            meta={
+                "dataset": "fever",
+                "claim": claim,
+                "has_external_evidence": bool(evidence_lookup and sample_id in evidence_lookup),
+                "simulated_tools": True,  # Always true now since we always populate tool_outputs
+            },
+        )
+        
+        samples_count += 1
+        if samples_count % 1000 == 0:
+            LOGGER.info(f"  Processed {samples_count} FEVER samples...")
+        
+        yield sample
+
+    LOGGER.info(f"Extracted {samples_count} FEVER samples (skipped {skipped_count})")
+
+
 def _assign_mutations_to_samples(records: List[SampleRecord]) -> None:
     """Assign mutation directives to samples in a round-robin fashion."""
     mutation_directives = [
@@ -494,7 +693,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "dataset",
-        choices=["webgpt", "hotpot", "gsm8k", "all"],
+        choices=["webgpt", "hotpot", "gsm8k", "fever", "all"],
         help="Dataset to convert",
     )
     parser.add_argument(
@@ -519,6 +718,18 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("data"),
         help="Directory where JSONL files will be written",
+    )
+    parser.add_argument(
+        "--evidence-file",
+        type=Path,
+        default=None,
+        help="Optional JSONL file mapping sample_id to evidence text (for FEVER)",
+    )
+    parser.add_argument(
+        "--fever-file",
+        type=Path,
+        default=None,
+        help="Optional local FEVER JSONL file (for FEVER dataset)",
     )
     parser.add_argument(
         "--debug",
@@ -547,6 +758,29 @@ def main() -> None:
         suffix = f"{limit // 1000}k"
     else:
         suffix = str(limit)
+    
+    # Load evidence lookup if provided (for FEVER)
+    evidence_lookup = None
+    if args.evidence_file and args.evidence_file.exists():
+        LOGGER.info(f"Loading evidence from {args.evidence_file}")
+        evidence_lookup = {}
+        with args.evidence_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        obj = json.loads(line)
+                        sample_id = obj.get("id") or obj.get("sample_id")
+                        evidence = obj.get("evidence") or obj.get("text")
+                        if sample_id and evidence:
+                            # Normalize sample_id format
+                            sample_id = str(sample_id)
+                            if not sample_id.startswith("fever-"):
+                                sample_id = f"fever-{sample_id}"
+                            evidence_lookup[sample_id] = evidence
+                    except json.JSONDecodeError:
+                        continue
+        LOGGER.info(f"Loaded evidence for {len(evidence_lookup)} samples")
 
     if args.dataset in {"webgpt", "all"}:
         split = args.split or "train"
@@ -576,6 +810,27 @@ def main() -> None:
         LOGGER.info(f"Building GSM8K samples from split '{split}'...")
         build_dataset_file(
             build_gsm8k_samples(split=split),
+            output_path,
+            limit=limit,
+            seed=seed,
+        )
+
+    if args.dataset in {"fever", "all"}:
+        split = args.split or "train"  # Default to train since that's the most common split
+        output_path = output_dir / f"fever_{suffix}.jsonl"
+        LOGGER.info(f"Building FEVER samples from split '{split}'...")
+        
+        # Use local file if provided, otherwise try to find it in data/fever_raw/
+        fever_file = args.fever_file
+        if not fever_file:
+            # Try default location
+            default_fever = Path("data/fever_raw") / f"{split}.jsonl"
+            if default_fever.exists():
+                fever_file = default_fever
+                LOGGER.info(f"Using default FEVER file: {fever_file}")
+        
+        build_dataset_file(
+            build_fever_samples(split=split, evidence_lookup=evidence_lookup, local_file=fever_file),
             output_path,
             limit=limit,
             seed=seed,

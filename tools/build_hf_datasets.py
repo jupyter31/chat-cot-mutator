@@ -21,6 +21,15 @@ from core.schema import (
     save_jsonl,
 )
 
+try:
+    from tools.fever_evidence_retriever import (
+        FEVERExactEvidenceRetriever,
+        FEVERDistractorRetriever,
+    )
+    _FEVER_RETRIEVER_AVAILABLE = True
+except ImportError:
+    _FEVER_RETRIEVER_AVAILABLE = False
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -460,6 +469,10 @@ def build_fever_samples(
     split: str = "train",
     evidence_lookup: Optional[Dict[str, str]] = None,
     local_file: Optional[Path] = None,
+    evidence_retriever = None,
+    retrieval_variant: str = "none",
+    k_total: int = 8,
+    limit: Optional[int] = None,
 ) -> Iterable[SampleRecord]:
     """
     Yield SampleRecord instances converted from FEVER (Fact Extraction and VERification).
@@ -470,6 +483,10 @@ def build_fever_samples(
                         If provided, this evidence will be used instead of empty passages.
                         This allows integration with external dense retrieval systems.
         local_file: Path to local FEVER JSONL file. If provided, loads from local file instead of HuggingFace.
+        evidence_retriever: FEVERExactEvidenceRetriever or FEVERDistractorRetriever instance
+        retrieval_variant: 'exact' for golden only, 'distractor' for golden+distractors, 'none' for placeholder
+        k_total: Total number of documents to retrieve (for distractor variant)
+        limit: Maximum number of samples to process (stops early if provided)
     
     Returns:
         Iterator of SampleRecord instances
@@ -478,6 +495,7 @@ def build_fever_samples(
     if local_file and local_file.exists():
         LOGGER.info(f"Loading FEVER dataset from local file: {local_file}")
         try:
+            samples_yielded = 0
             with local_file.open("r", encoding="utf-8") as f:
                 dataset = []
                 for line_num, line in enumerate(f, start=1):
@@ -547,6 +565,11 @@ def build_fever_samples(
                 LOGGER.debug(f"Row {idx}: Invalid label '{label_raw}'")
             continue
         
+        # Skip "NOT ENOUGH INFO" samples - not relevant for evidence-based experiments
+        if label == "NOT ENOUGH INFO":
+            skipped_count += 1
+            continue
+        
         # Get sample ID - preserve as string for alignment with external retrieval
         sample_id = row.get("id")
         if sample_id is None:
@@ -556,12 +579,50 @@ def build_fever_samples(
         if not sample_id.startswith("fever-"):
             sample_id = f"fever-{sample_id}"
         
-        # Handle evidence - either from external lookup or placeholder
+        # Handle evidence - use retriever if available, otherwise fallback to lookup or placeholder
         # Following HotPotQA pattern: evidence appears in both passages AND tool_outputs
         passages = []
         tool_outputs = []
+        evidence_docs = []
         
-        if evidence_lookup and sample_id in evidence_lookup:
+        # Try retriever first (if configured)
+        if evidence_retriever is not None and retrieval_variant != "none":
+            # Get evidence annotation from raw data
+            evidence_annotation = row.get("evidence", []) if isinstance(row, dict) else getattr(row, "evidence", [])
+            
+            if retrieval_variant == "exact":
+                evidence_docs = evidence_retriever.retrieve_golden_evidence(evidence_annotation)
+            elif retrieval_variant == "distractor":
+                evidence_docs = evidence_retriever.retrieve_with_distractors(
+                    claim, evidence_annotation, k_total=k_total
+                )
+            
+            # Convert evidence documents to passages and tool outputs
+            for doc in evidence_docs:
+                passages.append(
+                    FrozenPassageRecord(
+                        doc_id=doc.doc_id,
+                        cite=f"{doc.title} (sent {doc.sentence_id})" if doc.sentence_id is not None else doc.title,
+                        text=doc.text,
+                    )
+                )
+            
+            # Add all evidence to tool_outputs as a single retrieval result
+            if evidence_docs:
+                combined_evidence = "\n\n".join([
+                    f"[{i+1}] {doc.title}: {doc.text}"
+                    for i, doc in enumerate(evidence_docs)
+                ])
+                tool_outputs.append(
+                    FrozenToolRecord(
+                        tool="dense_retrieval",
+                        input=claim,
+                        output=combined_evidence,
+                    )
+                )
+        
+        # Fallback to evidence_lookup if no retriever
+        elif evidence_lookup and sample_id in evidence_lookup:
             # Use externally retrieved evidence
             evidence_text = evidence_lookup[sample_id]
             if evidence_text and evidence_text.strip():
@@ -572,7 +633,6 @@ def build_fever_samples(
                         text=evidence_text.strip(),
                     )
                 )
-                # Add to tool_outputs to simulate dense retrieval tool
                 tool_outputs.append(
                     FrozenToolRecord(
                         tool="dense_retrieval",
@@ -580,9 +640,9 @@ def build_fever_samples(
                         output=evidence_text.strip(),
                     )
                 )
-        else:
-            # Placeholder for evidence to be injected later
-            # Add to BOTH passages and tool_outputs (like HotPotQA pattern)
+        
+        # Final fallback: placeholder
+        if not passages:
             placeholder_text = "[Evidence will be retrieved externally based on sample_id]"
             passages.append(
                 FrozenPassageRecord(
@@ -591,7 +651,6 @@ def build_fever_samples(
                     text=placeholder_text,
                 )
             )
-            # Also add placeholder to tool_outputs so agents can access it
             tool_outputs.append(
                 FrozenToolRecord(
                     tool="dense_retrieval",
@@ -626,8 +685,11 @@ Answer with only one of: SUPPORTS, REFUTES, or NOT ENOUGH INFO"""
             meta={
                 "dataset": "fever",
                 "claim": claim,
+                "retrieval_variant": retrieval_variant,
+                "num_evidence_docs": len(evidence_docs) if evidence_docs else 0,
+                "num_golden_docs": sum(1 for d in evidence_docs if d.is_golden) if evidence_docs else 0,
                 "has_external_evidence": bool(evidence_lookup and sample_id in evidence_lookup),
-                "simulated_tools": True,  # Always true now since we always populate tool_outputs
+                "simulated_tools": True,
             },
         )
         
@@ -636,6 +698,12 @@ Answer with only one of: SUPPORTS, REFUTES, or NOT ENOUGH INFO"""
             LOGGER.info(f"  Processed {samples_count} FEVER samples...")
         
         yield sample
+        
+        # Stop early if limit reached
+        if limit and samples_yielded >= limit:
+            LOGGER.info(f"Reached limit of {limit} samples, stopping early")
+            break
+        samples_yielded += 1
 
     LOGGER.info(f"Extracted {samples_count} FEVER samples (skipped {skipped_count})")
 
@@ -730,6 +798,24 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional local FEVER JSONL file (for FEVER dataset)",
+    )
+    parser.add_argument(
+        "--fever-retrieval",
+        choices=["none", "exact", "distractor"],
+        default="none",
+        help="FEVER evidence retrieval variant: 'none' (placeholder), 'exact' (golden only), 'distractor' (golden+distractors)",
+    )
+    parser.add_argument(
+        "--fever-k",
+        type=int,
+        default=8,
+        help="Total number of evidence documents for FEVER distractor retrieval (default: 8)",
+    )
+    parser.add_argument(
+        "--fever-wiki-pages",
+        type=Path,
+        default=Path("data/fever_raw/wiki-pages/wiki-pages"),
+        help="Path to FEVER wiki-pages directory (default: data/fever_raw/wiki-pages/wiki-pages)",
     )
     parser.add_argument(
         "--debug",
@@ -829,8 +915,67 @@ def main() -> None:
                 fever_file = default_fever
                 LOGGER.info(f"Using default FEVER file: {fever_file}")
         
+        # Initialize evidence retriever if requested
+        evidence_retriever = None
+        retrieval_variant = args.fever_retrieval
+        
+        if retrieval_variant != "none":
+            if not _FEVER_RETRIEVER_AVAILABLE:
+                LOGGER.error("FEVER retriever not available. Install sentence-transformers and faiss.")
+                LOGGER.info("Falling back to 'none' (placeholder) mode.")
+                retrieval_variant = "none"
+            elif not args.fever_wiki_pages.exists():
+                LOGGER.error(f"Wiki-pages directory not found: {args.fever_wiki_pages}")
+                LOGGER.info("Falling back to 'none' (placeholder) mode.")
+                retrieval_variant = "none"
+            else:
+                try:
+                    if retrieval_variant == "exact":
+                        LOGGER.info("Initializing exact evidence retriever...")
+                        evidence_retriever = FEVERExactEvidenceRetriever(args.fever_wiki_pages)
+                    elif retrieval_variant == "distractor":
+                        LOGGER.info("Initializing distractor retriever (this may take a while)...")
+                        
+                        # Extract relevant articles from dataset to limit index size
+                        LOGGER.info("Extracting article titles from FEVER dataset...")
+                        relevant_articles = set()
+                        with open(fever_file, encoding='utf-8') as f:
+                            for line_idx, line in enumerate(f):
+                                if limit and line_idx >= limit * 2:  # Read more to get enough articles
+                                    break
+                                item = json.loads(line)
+                                if item.get('label') == 'NOT ENOUGH INFO':
+                                    continue
+                                evidence = item.get('evidence', [])
+                                for evidence_set in evidence:
+                                    for evidence_item in evidence_set:
+                                        if len(evidence_item) >= 3:
+                                            wiki_title = evidence_item[2]
+                                            if wiki_title:
+                                                relevant_articles.add(wiki_title)
+                        LOGGER.info(f"Found {len(relevant_articles)} unique article titles")
+                        
+                        evidence_retriever = FEVERDistractorRetriever(
+                            args.fever_wiki_pages,
+                            limit_to_articles=relevant_articles if len(relevant_articles) > 0 else None
+                        )
+                    LOGGER.info(f"Retriever initialized successfully (variant: {retrieval_variant})")
+                except Exception as e:
+                    LOGGER.error(f"Failed to initialize retriever: {e}")
+                    LOGGER.info("Falling back to 'none' (placeholder) mode.")
+                    retrieval_variant = "none"
+                    evidence_retriever = None
+        
         build_dataset_file(
-            build_fever_samples(split=split, evidence_lookup=evidence_lookup, local_file=fever_file),
+            build_fever_samples(
+                split=split,
+                evidence_lookup=evidence_lookup,
+                local_file=fever_file,
+                evidence_retriever=evidence_retriever,
+                retrieval_variant=retrieval_variant,
+                k_total=args.fever_k,
+                limit=limit,
+            ),
             output_path,
             limit=limit,
             seed=seed,

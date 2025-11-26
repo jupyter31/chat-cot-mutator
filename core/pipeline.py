@@ -70,6 +70,7 @@ class PromptTemplates:
     evidence_channel: str = "tool"
     tool_variant: str = "direct"
     cot_injection_channel: str = "system"
+    cot_injection_add_user_prompt: bool = False  # Add follow-up user message after injecting mutated CoT
 
     def __getitem__(self, condition: str) -> str:
         return self.condition_to_template[condition]
@@ -275,15 +276,15 @@ def assemble_messages(
 
         messages.append(tool_message)
 
-    # Add final user message repeating just the question
-    messages.append({"role": "user", "content": f"Question: {sample.query}"})
-    
-    # For conditions C, D, C_prime, D_prime: inject mutated CoT as assistant message
+    # For conditions C, D, C_prime, D_prime: inject mutated CoT as assistant message FIRST
     # This simulates the model having already "thought through" the problem
     # The model will then continue to generate the final answer
     # C/D: think=false (use only injected reasoning)
     # C_prime/D_prime: think=true (model can generate new reasoning after seeing injected CoT)
     if condition in {"C", "D", "C_prime", "D_prime"} and mutated_cot_text:
+        # Add user message before the assistant CoT
+        messages.append({"role": "user", "content": f"Question: {sample.query}"})
+        
         # Wrap the mutated CoT in <think> tags if not already present
         if not mutated_cot_text.strip().startswith("<think>"):
             cot_content = f"<think>\n{mutated_cot_text}\n</think>"
@@ -294,6 +295,15 @@ def assemble_messages(
             "role": "assistant",
             "content": cot_content,
         })
+        
+        # Optionally add follow-up user message to prompt for final answer
+        # This ensures the conversation ends with a user message, prompting the model to respond
+        # Some models (like Phi-4) need this to avoid returning empty responses
+        if prompts.cot_injection_add_user_prompt:
+            messages.append({"role": "user", "content": "Based on your reasoning above, please provide your final answer."})
+    else:
+        # For conditions A, B, A_prime, B_prime: just add final user message
+        messages.append({"role": "user", "content": f"Question: {sample.query}"})
     
     return messages
 
@@ -710,7 +720,7 @@ def _execute_condition(
     base_record = {
         "sample_id": sample.id,
         "condition": condition,
-        "prompt": final_prompt,
+        "prompt": sample.query,  # Use original question instead of last user message
         "messages": deepcopy(messages),
         "response": content,
         "final_answer": final_answer,

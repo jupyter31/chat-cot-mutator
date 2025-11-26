@@ -675,6 +675,9 @@ def run_experiment(config: Dict[str, Any], *, model_client=None) -> Dict[str, An
     if "cot_injection_channel" in config:
         prompts.cot_injection_channel = config["cot_injection_channel"]
         logger.info(f"✓ Overriding cot_injection_channel with config value: {prompts.cot_injection_channel}")
+    if "cot_injection_add_user_prompt" in config:
+        prompts.cot_injection_add_user_prompt = config["cot_injection_add_user_prompt"]
+        logger.info(f"✓ Overriding cot_injection_add_user_prompt with config value: {prompts.cot_injection_add_user_prompt}")
     
     logger.info(f"✓ Loaded {len(prompts.condition_to_template)} prompt templates")
     

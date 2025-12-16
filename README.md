@@ -1,5 +1,14 @@
 # chat-mutator
-[Work in Progress]
+
+**chat-mutator** is a Python-based *synthetic chat-data mutation* framework for stress-testing how chat-based LLMs behave when their conversational context is systematically perturbed. It takes multi-turn chat samples (JSONL), applies a selected “mutation” (predefined or custom), re-generates the assistant response using a configurable model backend, and then produces analysis artifacts to help you understand how the mutation impacted the model’s grounding and output quality.
+
+The repository ships with two primary workflows:
+
+- **Interactive Streamlit app** for uploading/pasting chat samples, selecting mutation types (and optional customizations), choosing the model used for mutation + response generation, and reviewing/exporting results (mutated samples, error logs, per-sample diff links, and an optional grounding/hallucination judge).
+- **Reproducible headless runner (CLI + YAML config)** for batch experiments (mirroring four experimental conditions A–D) that processes “frozen” samples, writes generations to a results directory, and aggregates summary + per-mutation metrics (e.g., `metrics_overall.json`, `metrics_by_mutation.json`, and `tokens_latency.csv`).
+
+There are also utilities to **convert Hugging Face datasets into frozen JSONL samples** (e.g., WebGPT and HotpotQA) so experiments can be reproduced deterministically.
+
 
 ## Install dependencies
 - Install Python version 3.12 on your system
